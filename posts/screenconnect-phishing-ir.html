@@ -168,7 +168,7 @@
 
   <article>
 
-    <p>A targeted phishing campaign hit our org with emails crafted specifically for internal distribution lists &mdash; the attackers knew our DL names, department structure, and even individual council members' names. One user clicked. Here's the full investigation, from initial detection to payload recovery to proving no data left the building.</p>
+    <p>A targeted phishing campaign hit our org with emails crafted specifically for internal distribution lists &mdash; the attackers knew our DL names and department structure. One user clicked. Here's the full investigation, from initial detection to payload recovery to proving no data left the building.</p>
 
     <p>Names, domains, and identifiers have been sanitized.</p>
 
@@ -182,7 +182,7 @@
 
     <p>Barracuda email logs showed a coordinated campaign &mdash; 7 emails from different addresses on a single compromised domain, all sent at the same timestamp, all routed through Google's smtp-relay. Subject lines were AP/invoice lures with unique reference numbers.</p>
 
-    <p>4 out of 7 emails made it through. Barracuda scored them at 1.2 against a kill threshold of 3.0. The other 3 were blocked with scores of 4.5 and 9.5. The attackers hit distribution lists (Legal, Operations), a shared mailbox, and a council member directly. 16 users were potentially exposed.</p>
+    <p>4 out of 7 emails made it through. Barracuda scored them at 1.2 against a kill threshold of 3.0. The other 3 were blocked with scores of 4.5 and 9.5. The attackers hit multiple distribution lists, a shared mailbox, and individual users directly. 16 users were potentially exposed.</p>
 
     <div class="callout callout-warn">The phishing emails were targeted. The attackers knew our distribution list names and org structure. This wasn't spray-and-pray.</div>
 
@@ -238,9 +238,9 @@ del "%FILENAME%" /f /q</code></pre>
 
     <h2>The Data Exposure Question</h2>
 
-    <p>Here's where it got serious. The compromised user works with child welfare cases. Chrome history showed they had been downloading confidential juvenile court documents, child welfare case files from the state DCYF managed file transfer, and tribal CPS safety plan recommendations &mdash; including files with named minors. All of this in the days surrounding the infection.</p>
+    <p>Here's where it got serious. The compromised user works with sensitive legal cases involving minors. Chrome history showed they had been downloading confidential court documents, case files from a state agency's managed file transfer, and internal safety plan recommendations &mdash; including files with named individuals. All of this in the days surrounding the infection.</p>
 
-    <p>The machine also had 5 mapped network drives, including shares for legal documents and court case attachments. The question: did any of this data get out?</p>
+    <p>The machine also had multiple mapped network drives, including shares for legal documents and case attachments. The question: did any of this data get out?</p>
 
     <h2>SRUM Analysis</h2>
 
@@ -257,7 +257,7 @@ del "%FILENAME%" /f /q</code></pre>
       <tr><td class="mono">SMB</td><td>10 MB</td><td>3.8 MB</td><td>Network shares</td></tr>
     </table>
 
-    <p><strong>Chrome sent only 272 KB during the infection hour.</strong> You cannot exfiltrate CPS case files or court documents in 272 KB. No unknown or suspicious processes appeared with network activity. All traffic was attributed to known legitimate applications.</p>
+    <p><strong>Chrome sent only 272 KB during the infection hour.</strong> You cannot exfiltrate case files or court documents in 272 KB. No unknown or suspicious processes appeared with network activity. All traffic was attributed to known legitimate applications.</p>
 
     <p>The following hour showed Chrome sending 36 MB / receiving 123 MB &mdash; but Chrome history confirmed the user was downloading court PDFs from a legal e-filing platform during that window. Normal activity.</p>
 
@@ -273,25 +273,25 @@ del "%FILENAME%" /f /q</code></pre>
 
     <h2>Forensic Imaging</h2>
 
-    <p>We imaged the 512GB NVMe using CAINE (forensic Linux distro) via Ventoy on a USB drive. This was on a Dell Pro 16 Plus with a brand new chipset, which caused some fun:</p>
+    <p>We imaged the NVMe using CAINE (forensic Linux distro) via Ventoy on a USB drive. This was on a newer Dell laptop with a recent chipset, which caused some fun:</p>
 
     <ul>
       <li><strong>Porteus 5.0</strong> &mdash; kernel too old for the I2C-HID keyboard controller. Internal and external keyboards both dead. System locked up.</li>
       <li><strong>Paladin</strong> &mdash; locked up before GRUB even loaded. Tried RAID/AHCI switch, disabled VMD, different USB ports. Nothing worked.</li>
-      <li><strong>CAINE via Ventoy</strong> &mdash; booted successfully. Guymager for E01 imaging to an ext4 partition on an 8TB external drive.</li>
+      <li><strong>CAINE via Ventoy</strong> &mdash; booted successfully. Guymager for E01 imaging to an external drive.</li>
     </ul>
 
     <p>Lesson: always have multiple forensic distros ready. New hardware will break at least one of them.</p>
 
     <h2>Standing Up Auditing Mid-Incident</h2>
 
-    <p>When we tried to check file server access logs to see what the user had accessed on the court case attachment shares, we found... nothing. Zero Security events. File access auditing wasn't enabled on any of our file servers.</p>
+    <p>When we tried to check file server access logs to see what the user had accessed on the sensitive shares, we found... nothing. Zero Security events. File access auditing wasn't enabled on any of our file servers.</p>
 
     <p>So we fixed it during the incident:</p>
 
     <ol>
       <li><strong>auditpol</strong> &mdash; enabled File System, File Share, and Detailed File Share auditing (Success + Failure)</li>
-      <li><strong>SACLs</strong> &mdash; set audit rules on sensitive share paths (child welfare, legal, court, prosecutors)</li>
+      <li><strong>SACLs</strong> &mdash; set audit rules on sensitive share paths</li>
       <li><strong>Splunk Universal Forwarder</strong> &mdash; deployed to all file servers, forwarding Security event logs</li>
     </ol>
 
