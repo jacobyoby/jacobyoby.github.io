@@ -3,151 +3,264 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Dissecting a ScreenConnect phishing attack: XOR-encrypted bat file, Cisco AMP quarantine recovery, SRUM analysis to prove no data exfiltration.">
 <title>Dissecting a ScreenConnect Phishing Attack | Jacob Rakai</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #c9d1d9;
-    --text-dim: #8b949e;
-    --accent: #58a6ff;
-    --accent-hover: #79c0ff;
-    --green: #3fb950;
-    --red: #f85149;
-    --yellow: #d29922;
+    --bg: #101014;
+    --surface: #18181e;
+    --surface-raised: #1f1f27;
+    --border: #2a2a35;
+    --border-light: #35354a;
+    --text: #d4d4d8;
+    --text-dim: #8888a0;
+    --text-bright: #ececf0;
+    --accent: #7eb8da;
+    --accent-hover: #a0d0ee;
+    --green: #5cb870;
+    --red: #d45555;
+    --yellow: #c9a84c;
+    --orange: #cc7744;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.7;
   }
   a { color: var(--accent); text-decoration: none; }
-  a:hover { color: var(--accent-hover); text-decoration: underline; }
-  .container { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+  a:hover { color: var(--accent-hover); }
+  .skip-link {
+    position: absolute;
+    top: -100px;
+    left: 0;
+    background: var(--accent);
+    color: var(--bg);
+    padding: 8px 16px;
+    z-index: 100;
+    font-size: 14px;
+  }
+  .skip-link:focus { top: 0; }
+  .container { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+
   nav {
-    border-bottom: 1px solid var(--border);
-    padding: 16px 0;
-    margin-bottom: 40px;
+    padding: 20px 0;
+    margin-bottom: 48px;
   }
   nav .container { display: flex; justify-content: space-between; align-items: center; }
-  nav .logo { font-size: 18px; font-weight: 700; color: var(--text); }
-  nav .logo:hover { color: var(--accent); text-decoration: none; }
-  nav .links a { margin-left: 24px; color: var(--text-dim); font-size: 14px; }
+  nav .logo {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  nav .logo:hover { color: var(--text-bright); }
+  nav .links a { margin-left: 28px; color: var(--text-dim); font-size: 14px; letter-spacing: 0.3px; }
   nav .links a:hover { color: var(--text); }
 
-  /* POST */
-  .post-header { margin-bottom: 32px; }
-  .post-header h1 { font-size: 32px; line-height: 1.3; margin-bottom: 12px; }
-  .post-header .meta { font-size: 14px; color: var(--text-dim); }
+  /* POST HEADER */
+  .post-header {
+    margin-bottom: 40px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .post-header h1 {
+    font-size: 30px;
+    line-height: 1.3;
+    margin-bottom: 16px;
+    color: var(--text-bright);
+    letter-spacing: -0.5px;
+    font-weight: 700;
+  }
+  .post-header .meta {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    line-height: 1.8;
+  }
   .tag {
     display: inline-block;
     font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 12px;
     margin-right: 4px;
-    font-weight: 500;
+    font-weight: 600;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    letter-spacing: 0.3px;
   }
-  .tag-ir { background: rgba(248,81,73,0.15); color: var(--red); }
-  .tag-dfir { background: rgba(210,153,34,0.15); color: var(--yellow); }
-  .tag-splunk { background: rgba(63,185,80,0.15); color: var(--green); }
+  .tag-ir { color: var(--red); }
+  .tag-ir::before { content: "#"; }
+  .tag-dfir { color: var(--orange); }
+  .tag-dfir::before { content: "#"; }
+  .tag-splunk { color: var(--green); }
+  .tag-splunk::before { content: "#"; }
 
+  /* ARTICLE TYPOGRAPHY */
+  article {
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--text);
+  }
   article h2 {
-    font-size: 22px;
-    margin-top: 36px;
-    margin-bottom: 12px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border);
+    font-size: 20px;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-top: 24px;
+    color: var(--text-bright);
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    border-top: 1px solid var(--border);
+  }
+  article h2:first-child {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
   }
   article h3 {
-    font-size: 17px;
-    margin-top: 24px;
-    margin-bottom: 8px;
+    font-size: 16px;
+    margin-top: 28px;
+    margin-bottom: 10px;
+    color: var(--text-bright);
+    font-weight: 600;
   }
   article p {
-    margin-bottom: 14px;
+    margin-bottom: 18px;
     font-size: 15px;
+    line-height: 1.8;
+  }
+  article > p:first-child {
+    font-size: 16px;
+    color: var(--text);
+    line-height: 1.85;
   }
   article ul, article ol {
-    margin: 8px 0 16px 24px;
+    margin: 12px 0 20px 20px;
     font-size: 15px;
   }
-  article li { margin-bottom: 6px; }
+  article li {
+    margin-bottom: 8px;
+    line-height: 1.75;
+  }
+  article strong {
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+
+  /* CODE */
   code {
-    font-family: 'Consolas', 'Fira Code', monospace;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
     font-size: 13px;
     background: var(--surface);
     padding: 2px 6px;
-    border-radius: 3px;
+    border-radius: 2px;
     border: 1px solid var(--border);
+    color: var(--accent);
   }
   pre {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
+    border-left: 3px solid var(--border-light);
+    padding: 18px 20px;
     overflow-x: auto;
-    margin: 12px 0 16px;
+    margin: 16px 0 24px;
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.6;
+    border-radius: 0;
+    -webkit-overflow-scrolling: touch;
   }
   pre code {
     background: none;
     border: none;
     padding: 0;
+    color: var(--text);
+    word-wrap: normal;
+    white-space: pre;
   }
+
+  /* CALLOUTS */
   .callout {
     border-left: 3px solid var(--accent);
-    background: var(--surface);
-    padding: 12px 16px;
-    margin: 16px 0;
+    padding: 14px 18px;
+    margin: 20px 0 24px;
     font-size: 14px;
-    border-radius: 0 6px 6px 0;
+    line-height: 1.7;
+    color: var(--text);
+    background: transparent;
   }
-  .callout-warn {
-    border-left-color: var(--yellow);
-  }
-  .callout-good {
-    border-left-color: var(--green);
-  }
-  .callout-bad {
-    border-left-color: var(--red);
+  .callout-warn { border-left-color: var(--yellow); }
+  .callout-good { border-left-color: var(--green); }
+  .callout-bad { border-left-color: var(--red); }
+
+  /* TABLES */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 16px 0 24px;
+    -webkit-overflow-scrolling: touch;
   }
   table {
     width: 100%;
     border-collapse: collapse;
-    margin: 12px 0 16px;
-    font-size: 14px;
+    font-size: 13px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
   }
   th {
-    background: var(--surface);
     text-align: left;
-    padding: 8px 12px;
-    border-bottom: 2px solid var(--border);
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border-light);
     font-weight: 600;
+    color: var(--text-bright);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
   }
   td {
-    padding: 6px 12px;
+    padding: 8px 14px;
     border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
   }
-  .mono { font-family: 'Consolas', monospace; font-size: 13px; }
-  footer {
-    margin-top: 60px;
-    padding: 20px 0;
+  tr:hover td { background: var(--surface); }
+
+  /* FOOTER / NAV */
+  .post-footer {
+    margin-top: 56px;
+    padding-top: 24px;
     border-top: 1px solid var(--border);
+    font-size: 14px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  .post-footer a { font-size: 13px; }
+  footer {
+    margin-top: 48px;
+    padding: 24px 0;
     text-align: center;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-dim);
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+
+  /* SELECTION */
+  ::selection {
+    background: rgba(126, 184, 218, 0.25);
+    color: var(--text-bright);
+  }
+
+  @media (max-width: 600px) {
+    .post-header h1 { font-size: 24px; }
+    article h2 { font-size: 18px; }
+    .container { padding: 0 16px; }
+    pre { padding: 14px 12px; font-size: 12px; }
+    table { font-size: 12px; }
+    th, td { padding: 6px 8px; }
   }
 </style>
 </head>
 <body>
 
+<a href="#main" class="skip-link">Skip to content</a>
+
 <nav>
   <div class="container">
-    <a href="/" class="logo">jacobrakai</a>
+    <a href="/" class="logo">jacob@rakai ~$</a>
     <div class="links">
       <a href="/">posts</a>
       <a href="/about.html">about</a>
@@ -155,12 +268,12 @@
   </div>
 </nav>
 
-<div class="container">
+<div class="container" id="main">
   <div class="post-header">
     <h1>Dissecting a ScreenConnect Phishing Attack: From Bat File to SRUM Analysis</h1>
     <div class="meta">
-      March 17, 2026 &middot; 12 min read<br>
-      <span class="tag tag-ir">incident response</span>
+      2026-03-17 &middot; 12 min read<br>
+      <span class="tag tag-ir">IR</span>
       <span class="tag tag-dfir">DFIR</span>
       <span class="tag tag-splunk">splunk</span>
     </div>
@@ -248,14 +361,16 @@ del "%FILENAME%" /f /q</code></pre>
 
     <p>Results for the infection hour (16:00-17:00 UTC, infection at 16:31):</p>
 
+    <div class="table-wrap">
     <table>
       <tr><th>Process</th><th>Sent</th><th>Received</th><th>Notes</th></tr>
-      <tr><td class="mono">chrome.exe</td><td><strong>272 KB</strong></td><td>860 KB</td><td>Normal browsing</td></tr>
-      <tr><td class="mono">Teams</td><td>4 MB</td><td>109 MB</td><td>Meeting traffic</td></tr>
-      <tr><td class="mono">BITS</td><td>556 KB</td><td>98 MB</td><td>Windows updates</td></tr>
-      <tr><td class="mono">DoSvc</td><td>28 MB</td><td>355 KB</td><td>Delivery Optimization</td></tr>
-      <tr><td class="mono">SMB</td><td>10 MB</td><td>3.8 MB</td><td>Network shares</td></tr>
+      <tr><td>chrome.exe</td><td><strong>272 KB</strong></td><td>860 KB</td><td>Normal browsing</td></tr>
+      <tr><td>Teams</td><td>4 MB</td><td>109 MB</td><td>Meeting traffic</td></tr>
+      <tr><td>BITS</td><td>556 KB</td><td>98 MB</td><td>Windows updates</td></tr>
+      <tr><td>DoSvc</td><td>28 MB</td><td>355 KB</td><td>Delivery Optimization</td></tr>
+      <tr><td>SMB</td><td>10 MB</td><td>3.8 MB</td><td>Network shares</td></tr>
     </table>
+    </div>
 
     <p><strong>Chrome sent only 272 KB during the infection hour.</strong> You cannot exfiltrate case files or court documents in 272 KB. No unknown or suspicious processes appeared with network activity. All traffic was attributed to known legitimate applications.</p>
 
@@ -318,15 +433,17 @@ del "%FILENAME%" /f /q</code></pre>
 
     <h2>IOCs</h2>
 
+    <div class="table-wrap">
     <table>
       <tr><th>Type</th><th>Value</th></tr>
-      <tr><td>SHA-256</td><td class="mono">06b3af2617c9cc5a82542501251ee62f53a1328f8638ba40faf0ccc094e50111</td></tr>
-      <tr><td>C2 IP</td><td class="mono">177.11.54[.]203:443</td></tr>
-      <tr><td>C2 Domain</td><td class="mono">nacionalrastreamento[.]com[.]br</td></tr>
-      <tr><td>Phishing Domain</td><td class="mono">beaglermap[.]com</td></tr>
-      <tr><td>Email Domain</td><td class="mono">doctormorton[.]com</td></tr>
-      <tr><td>Hosting</td><td class="mono">Cloudflare R2 (reported to abuse)</td></tr>
+      <tr><td>SHA-256</td><td>06b3af2617c9cc5a82542501251ee62f53a1328f8638ba40faf0ccc094e50111</td></tr>
+      <tr><td>C2 IP</td><td>177.11.54[.]203:443</td></tr>
+      <tr><td>C2 Domain</td><td>nacionalrastreamento[.]com[.]br</td></tr>
+      <tr><td>Phishing Domain</td><td>beaglermap[.]com</td></tr>
+      <tr><td>Email Domain</td><td>doctormorton[.]com</td></tr>
+      <tr><td>Hosting</td><td>Cloudflare R2 (reported to abuse)</td></tr>
     </table>
+    </div>
 
     <h2>Tools Used</h2>
 
@@ -341,11 +458,15 @@ del "%FILENAME%" /f /q</code></pre>
     </ul>
 
   </article>
+
+  <div class="post-footer">
+    <a href="/">&larr; back to posts</a>
+  </div>
 </div>
 
 <footer>
   <div class="container">
-    &copy; 2026 Jacob Rakai &middot; <a href="/">back to posts</a>
+    &copy; 2026 jacob rakai
   </div>
 </footer>
 
