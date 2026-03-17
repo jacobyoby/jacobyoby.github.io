@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jacob Rakai | Security &amp; IT</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+  .container { max-width: 800px; margin: 0 auto; padding: 0 20px; }
+
+  /* NAV */
+  nav {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 0;
+    margin-bottom: 40px;
+  }
+  nav .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  nav .logo {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  nav .logo:hover { color: var(--accent); text-decoration: none; }
+  nav .links a {
+    margin-left: 24px;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  nav .links a:hover { color: var(--text); }
+
+  /* HERO */
+  .hero {
+    padding: 40px 0 50px;
+  }
+  .hero h1 {
+    font-size: 36px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .hero .tagline {
+    font-size: 18px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+  }
+  .hero .bio {
+    font-size: 15px;
+    color: var(--text-dim);
+    max-width: 600px;
+    line-height: 1.7;
+  }
+
+  /* POSTS */
+  .section-title {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .post-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 12px;
+    transition: border-color 0.2s;
+  }
+  .post-card:hover { border-color: var(--accent); }
+  .post-card a { text-decoration: none; }
+  .post-card h3 {
+    font-size: 18px;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .post-card .meta {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .post-card .excerpt {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-right: 4px;
+    font-weight: 500;
+  }
+  .tag-ir { background: rgba(248,81,73,0.15); color: var(--red); }
+  .tag-dfir { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .tag-splunk { background: rgba(63,185,80,0.15); color: var(--green); }
+  .tag-email { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+  /* FOOTER */
+  footer {
+    margin-top: 60px;
+    padding: 20px 0;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="/" class="logo">jacobrakai</a>
+    <div class="links">
+      <a href="/">posts</a>
+      <a href="/about.html">about</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="hero">
+    <h1>Jacob Rakai</h1>
+    <div class="tagline">Security &amp; Systems Administration</div>
+    <div class="bio">IT security write-ups, incident response, and sysadmin notes from tribal government infrastructure. Documenting the work so others don't have to figure it out from scratch.</div>
+  </div>
+
+  <div class="section-title">Posts</div>
+
+  <a href="/posts/screenconnect-phishing-ir.html">
+    <div class="post-card">
+      <h3>Dissecting a ScreenConnect Phishing Attack: From Bat File to SRUM Analysis</h3>
+      <div class="meta">
+        March 17, 2026 &middot; 12 min read
+        <span class="tag tag-ir">incident response</span>
+        <span class="tag tag-dfir">DFIR</span>
+        <span class="tag tag-splunk">splunk</span>
+      </div>
+      <div class="excerpt">A targeted phishing campaign delivered a XOR-encrypted batch file that silently installs ScreenConnect via Cloudflare R2. We recovered the payload from Cisco AMP's quarantine vault, used SRUM to rule out data exfiltration, and stood up file access auditing from scratch during the investigation.</div>
+    </div>
+  </a>
+
+</div>
+
+<footer>
+  <div class="container">
+    &copy; 2026 Jacob Rakai
+  </div>
+</footer>
+
+</body>
+</html>

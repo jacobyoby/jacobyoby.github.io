@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About | Jacob Rakai</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+  .container { max-width: 800px; margin: 0 auto; padding: 0 20px; }
+  nav {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 0;
+    margin-bottom: 40px;
+  }
+  nav .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  nav .logo {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  nav .logo:hover { color: var(--accent); text-decoration: none; }
+  nav .links a {
+    margin-left: 24px;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  nav .links a:hover { color: var(--text); }
+  h1 { font-size: 28px; margin-bottom: 20px; }
+  h2 { font-size: 20px; margin-top: 30px; margin-bottom: 12px; color: var(--text); }
+  p { margin-bottom: 12px; color: var(--text-dim); font-size: 15px; line-height: 1.7; }
+  ul { margin: 8px 0 16px 20px; color: var(--text-dim); font-size: 15px; }
+  li { margin-bottom: 4px; }
+  footer {
+    margin-top: 60px;
+    padding: 20px 0;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="/" class="logo">jacobrakai</a>
+    <div class="links">
+      <a href="/">posts</a>
+      <a href="/about.html">about</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <h1>About</h1>
+
+  <p>Systems Administrator focused on security, incident response, and infrastructure for tribal government. I work with Active Directory, Exchange, Cisco voice/video, endpoint security, and whatever else needs fixing on any given day.</p>
+
+  <p>This site is where I document investigations, tooling, and lessons learned. Everything here is sanitized and generalized from real-world work.</p>
+
+  <h2>Tools I Work With</h2>
+  <ul>
+    <li>Cisco Secure Endpoint (AMP), Umbrella, Secure Client</li>
+    <li>Splunk (deployment, queries, forwarder management)</li>
+    <li>Barracuda Email Security Gateway</li>
+    <li>Active Directory, Exchange, Group Policy</li>
+    <li>Cisco Call Manager, Unity Connection</li>
+    <li>CAINE, Guymager, SrumECmd, Zimmerman tools</li>
+    <li>PowerShell (a lot of it)</li>
+  </ul>
+
+  <h2>Contact</h2>
+  <p>Find me on <a href="https://github.com/jacobrakai">GitHub</a> or <a href="https://linkedin.com/in/">LinkedIn</a>.</p>
+</div>
+
+<footer>
+  <div class="container">
+    &copy; 2026 Jacob Rakai
+  </div>
+</footer>
+
+</body>
+</html>
