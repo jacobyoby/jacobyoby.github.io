@@ -569,7 +569,9 @@ MSIEXEC.EXE-*.pf       (Stage 1 MSI install)</code></pre>
 
     <h2>The Lesson That Still Stings</h2>
 
-    <div class="callout callout-bad"><strong>The machine was wiped before a forensic image was taken.</strong> All of the analysis above was performed live via C$ admin share &mdash; remoting into the filesystem while the machine was still running. The malware artifacts, the steganographic PNG, the trojanized <code>base64.py</code>, the 90,125-character RAT source code &mdash; all documented in the incident report but never preserved as files. When the machine was wiped, they were gone. Permanently. I wrote about every stage in detail, but I can't hand anyone the actual artifacts. Image first, investigate second. Always.</div>
+    <div class="callout callout-warn"><strong>The machine was wiped before a forensic image was taken.</strong> All of the analysis above was performed live via C$ admin share &mdash; remoting into the filesystem while the machine was still running. I documented every stage in detail, but the actual malware artifacts weren't preserved as standalone files at the time. The machine got reimaged and I thought they were gone.</div>
+
+    <p>Weeks later, I discovered a forensic backup had been made of the machine before the wipe. The malware artifacts &mdash; the MSI, the dropper, the trojanized <code>base64.py</code>, the steganographic PNG, the RAT source &mdash; are all recoverable. Lesson adjusted: image first is still the right call, but also check with your team before assuming evidence is gone forever.</p>
 
     <h2>Key Takeaways</h2>
 
@@ -578,7 +580,7 @@ MSIEXEC.EXE-*.pf       (Stage 1 MSI install)</code></pre>
       <li><strong>PNG steganography hides 90K characters in plain sight.</strong> The file looks like a normal background image. It opens correctly. It has valid headers and checksums. Traditional file scanning and even sandbox analysis won't catch it because the file isn't malicious &mdash; the data is.</li>
       <li><strong>MSI metadata is forensically rich.</strong> Build timestamps, tooling versions, manufacturer strings, product GUIDs &mdash; the attacker left their build environment fingerprint in the MSI. Cross-reference these against known campaigns.</li>
       <li><strong>RunMRU + UserAssist + BAM + Prefetch = definitive proof of execution method.</strong> Four independent artifacts corroborating the same story. Any single one could be questioned. All four together are conclusive.</li>
-      <li><strong>Image before you investigate.</strong> You can always analyze an image later. You can't image a wiped machine. The investigation will still be there tomorrow. The disk might not be.</li>
+      <li><strong>Image before you investigate.</strong> You can always analyze an image later. You can't image a wiped machine. A forensic backup saved this case &mdash; but relying on luck isn't a process.</li>
       <li><strong>New hires are high-value social engineering targets.</strong> Seven weeks on the job, still learning what's normal, unlikely to question "IT verification." Onboarding security awareness training needs to happen on day one, not day thirty.</li>
     </ul>
 
