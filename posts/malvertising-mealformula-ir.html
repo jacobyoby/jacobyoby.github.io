@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Hunting through Chrome Incognito mode: using SRUM network data and Cisco Umbrella DNS logs to reconstruct a malvertising attack chain when browser history was empty.">
+<title>Hunting Through Chrome Incognito: How SRUM and Umbrella DNS Solved a Malvertising Case | Jacobrakai</title>
+<style>
+  :root {
+    --bg: #101014;
+    --surface: #18181e;
+    --surface-raised: #1f1f27;
+    --border: #2a2a35;
+    --border-light: #35354a;
+    --text: #d4d4d8;
+    --text-dim: #8888a0;
+    --text-bright: #ececf0;
+    --accent: #7eb8da;
+    --accent-hover: #a0d0ee;
+    --green: #5cb870;
+    --red: #d45555;
+    --yellow: #c9a84c;
+    --orange: #cc7744;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); }
+  .skip-link {
+    position: absolute;
+    top: -100px;
+    left: 0;
+    background: var(--accent);
+    color: var(--bg);
+    padding: 8px 16px;
+    z-index: 100;
+    font-size: 14px;
+  }
+  .skip-link:focus { top: 0; }
+  .container { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+
+  nav {
+    padding: 20px 0;
+    margin-bottom: 48px;
+  }
+  nav .container { display: flex; justify-content: space-between; align-items: center; }
+  nav .logo {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  nav .logo:hover { color: var(--text-bright); }
+  nav .links a { margin-left: 28px; color: var(--text-dim); font-size: 14px; letter-spacing: 0.3px; }
+  nav .links a:hover { color: var(--text); }
+
+  /* POST HEADER */
+  .post-header {
+    margin-bottom: 40px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .post-header h1 {
+    font-size: 30px;
+    line-height: 1.3;
+    margin-bottom: 16px;
+    color: var(--text-bright);
+    letter-spacing: -0.5px;
+    font-weight: 700;
+  }
+  .post-header .meta {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    line-height: 1.8;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    margin-right: 4px;
+    font-weight: 600;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    letter-spacing: 0.3px;
+  }
+  .tag-ir { color: var(--red); }
+  .tag-ir::before { content: "#"; }
+  .tag-dfir { color: var(--orange); }
+  .tag-dfir::before { content: "#"; }
+  .tag-srum { color: var(--green); }
+  .tag-srum::before { content: "#"; }
+
+  /* ARTICLE TYPOGRAPHY */
+  article {
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--text);
+  }
+  article h2 {
+    font-size: 20px;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-top: 24px;
+    color: var(--text-bright);
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    border-top: 1px solid var(--border);
+  }
+  article h2:first-child {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+  }
+  article h3 {
+    font-size: 16px;
+    margin-top: 28px;
+    margin-bottom: 10px;
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+  article p {
+    margin-bottom: 18px;
+    font-size: 15px;
+    line-height: 1.8;
+  }
+  article > p:first-child {
+    font-size: 16px;
+    color: var(--text);
+    line-height: 1.85;
+  }
+  article ul, article ol {
+    margin: 12px 0 20px 20px;
+    font-size: 15px;
+  }
+  article li {
+    margin-bottom: 8px;
+    line-height: 1.75;
+  }
+  article strong {
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+
+  /* CODE */
+  code {
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    font-size: 13px;
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    color: var(--accent);
+  }
+  pre {
+    background: var(--surface);
+    border-left: 3px solid var(--border-light);
+    padding: 18px 20px;
+    overflow-x: auto;
+    margin: 16px 0 24px;
+    font-size: 13px;
+    line-height: 1.6;
+    border-radius: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    word-wrap: normal;
+    white-space: pre;
+  }
+
+  /* CALLOUTS */
+  .callout {
+    border-left: 3px solid var(--accent);
+    padding: 14px 18px;
+    margin: 20px 0 24px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    background: transparent;
+  }
+  .callout-warn { border-left-color: var(--yellow); }
+  .callout-good { border-left-color: var(--green); }
+  .callout-bad { border-left-color: var(--red); }
+
+  /* TABLES */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 16px 0 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border-light);
+    font-weight: 600;
+    color: var(--text-bright);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+  }
+  tr:hover td { background: var(--surface); }
+
+  /* FOOTER / NAV */
+  .post-footer {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  .post-footer a { font-size: 13px; }
+  footer {
+    margin-top: 48px;
+    padding: 24px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+
+  /* SELECTION */
+  ::selection {
+    background: rgba(126, 184, 218, 0.25);
+    color: var(--text-bright);
+  }
+
+  @media (max-width: 600px) {
+    .post-header h1 { font-size: 24px; }
+    article h2 { font-size: 18px; }
+    .container { padding: 0 16px; }
+    pre { padding: 14px 12px; font-size: 12px; }
+    table { font-size: 12px; }
+    th, td { padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+
+<nav>
+  <div class="container">
+    <a href="/" class="logo">jacob@rakai ~$</a>
+    <div class="links">
+      <a href="/">posts</a>
+      <a href="/about.html">about</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container" id="main">
+  <div class="post-header">
+    <h1>Hunting Through Chrome Incognito: How SRUM and Umbrella DNS Solved a Malvertising Case</h1>
+    <div class="meta">
+      2026-03-18 &middot; ~15 min read<br>
+      <span class="tag tag-ir">IR</span>
+      <span class="tag tag-dfir">DFIR</span>
+      <span class="tag tag-srum">SRUM</span>
+    </div>
+  </div>
+
+  <article>
+
+    <p>Talos Threat Hunting flagged chrome.exe downloading and executing a suspicious binary on a Food Services Manager's workstation. Severity: CRITICAL. What followed was one of those investigations where every evidence source came back empty &mdash; until two artifacts cracked the whole thing wide open.</p>
+
+    <p>Names, hostnames, and identifiers have been sanitized.</p>
+
+    <h2>The Alert</h2>
+
+    <p>The Talos flag was straightforward: Chrome had downloaded a file called <code>MealFormula.exe</code> and executed it. On its face, that's bad. An unknown executable pulled down by a browser and immediately run? That's textbook malware delivery.</p>
+
+    <p>I pulled the file and sent it to <a href="https://tria.ge">Tria.ge</a> for sandbox analysis. The results were... anticlimactic. <code>MealFormula.exe</code> was a renamed copy of the legitimate WinRAR installer. Valid EV code signing certificate from win.rar GmbH. Sandbox score 5/10 &mdash; all the flagged behaviors were normal installer stuff: writing to Program Files, creating registry keys, requesting elevation.</p>
+
+    <div class="callout">SHA-256: <code>CFCA124C2141B4171CEBAD48CC286751910B408AEC69767DB2BC3AF38F277A06</code> &mdash; this is a clean, signed WinRAR installer. Not malware.</div>
+
+    <p>Severity downgraded. Looked like a false positive. A user downloaded WinRAR with a weird filename, AMP flagged it, case closed.</p>
+
+    <p>Except I couldn't figure out <em>where</em> it came from.</p>
+
+    <h2>The Dead Ends</h2>
+
+    <p>This is the part of the investigation that felt like hitting walls for hours. I needed to answer one question: how did <code>MealFormula.exe</code> get onto this machine?</p>
+
+    <p><strong>Chrome browser history:</strong> 0 bytes. The <code>History</code> SQLite database existed but contained no records. I confirmed with Python:</p>
+
+<pre><code>import sqlite3
+conn = sqlite3.connect('History')
+cursor = conn.execute("SELECT url, title, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 20")
+rows = cursor.fetchall()
+print(f"Total rows: {len(rows)}")
+# Total rows: 0</code></pre>
+
+    <p>Zero rows. No downloads table entries either. The database was essentially freshly initialized.</p>
+
+    <p><strong>Edge browser history:</strong> Nothing relevant. The user wasn't using Edge for this.</p>
+
+    <p><strong>Zone.Identifier (Mark of the Web):</strong> No alternate data stream on the file. If it had been downloaded through a normal browser download, Windows should have stamped it with a Zone.Identifier ADS containing the referrer URL and download URL. Nothing.</p>
+
+    <p><strong>USB history:</strong> Checked for removable media delivery. No evidence of any USB storage device.</p>
+
+    <p><strong>Network shares:</strong> The file wasn't present on any mapped drives or accessible shares.</p>
+
+    <div class="callout callout-bad">Every delivery vector eliminated. Chrome history empty. Edge clean. No MOTW. No USB. No network shares. The file appeared on the machine like it materialized out of thin air.</div>
+
+    <p>I was stuck. AMP trajectory confirmed Chrome downloaded the file, but Chrome's own records had been wiped clean. Something wasn't adding up.</p>
+
+    <h2>SRUM: The Breakthrough</h2>
+
+    <p>Here's where it got interesting. If Chrome's history was empty but AMP saw Chrome downloading the file, what if the user was running Chrome in <strong>Incognito mode</strong>?</p>
+
+    <p>Incognito doesn't write to the History database. It doesn't save downloads. It doesn't create cookies on disk. From a browser forensics perspective, it's a black hole. But Incognito can't hide from the operating system.</p>
+
+    <p>The <strong>System Resource Usage Monitor (SRUM)</strong> is a Windows telemetry database at <code>C:\Windows\System32\sru\srudb.dat</code>. It tracks per-application resource usage &mdash; CPU time, network bytes sent/received, foreground time &mdash; in time-bucketed records. It doesn't care if Chrome is in Incognito or not. It just sees <code>chrome.exe</code> moving bytes.</p>
+
+    <p>I pulled the SRUM database using VSS and parsed it two ways &mdash; first with <a href="https://github.com/EricZimmerman/Srum">SrumECmd</a> for a quick look, then with Python and sqlite3 for custom queries against the parsed output.</p>
+
+<pre><code># After parsing with SrumECmd, query the network usage data
+import sqlite3, csv
+
+# SrumECmd outputs to CSV - load and filter for chrome.exe
+with open('SrumECmd_NetworkUsage_Output.csv', 'r') as f:
+    reader = csv.DictReader(f)
+    chrome_rows = [r for r in reader if 'chrome' in r['ExeInfo'].lower()]
+
+for row in chrome_rows:
+    print(f"{row['Timestamp']}  Sent: {row['BytesSent']}  Recv: {row['BytesRecvd']}")</code></pre>
+
+    <p>The results told the whole story. Chrome had been running with <strong>heavy network usage</strong> despite the empty browser profile. The user had been running Chrome in Incognito mode daily since at least January 2026.</p>
+
+    <p>Here are the daily SRUM totals for Chrome around the download date:</p>
+
+    <div class="table-wrap">
+    <table>
+      <tr><th>Date</th><th>Bytes Sent</th><th>Bytes Received</th><th>Send/Recv Ratio</th></tr>
+      <tr><td>2026-03-10</td><td>98.2 MB</td><td>54.1 MB</td><td>1.82</td></tr>
+      <tr><td>2026-03-11</td><td>112.7 MB</td><td>61.3 MB</td><td>1.84</td></tr>
+      <tr><td>2026-03-12</td><td>105.4 MB</td><td>58.9 MB</td><td>1.79</td></tr>
+      <tr><td>2026-03-13</td><td>140.5 MB</td><td>72.5 MB</td><td>1.94</td></tr>
+      <tr><td>2026-03-14</td><td>88.6 MB</td><td>47.2 MB</td><td>1.88</td></tr>
+    </table>
+    </div>
+
+    <p>March 13th was the download day. <strong>72.5 MB received, 140.5 MB sent.</strong> Those upload ratios immediately caught my attention &mdash; sends consistently exceeding receives by nearly 2x. That's unusual for normal browsing, where you typically receive far more than you send. Was data being exfiltrated?</p>
+
+    <div class="callout callout-warn">SRUM proved Chrome was being heavily used when every browser artifact said it wasn't. Incognito erases browser history, but it can't erase OS-level telemetry. The ghost had fingerprints.</div>
+
+    <p>But SRUM only tells you <em>how much</em> data moved, not <em>where</em> it went. I needed DNS.</p>
+
+    <h2>Umbrella DNS: The Full Picture</h2>
+
+    <p>We run Cisco Umbrella across the environment, which means every DNS query from every machine gets logged. Incognito mode doesn't encrypt your DNS queries (unless you're running DoH, which this machine wasn't). Every site the user visited in Incognito still generated a DNS lookup that Umbrella captured.</p>
+
+    <p>I pulled the Umbrella DNS logs for the workstation on March 13th. Here's the exact attack chain, reconstructed from DNS query timestamps:</p>
+
+    <div class="table-wrap">
+    <table>
+      <tr><th>Time (UTC)</th><th>Domain</th><th>Category</th><th>Significance</th></tr>
+      <tr><td>12:11:04</td><td>sallysbakingaddiction[.]com</td><td>Food &amp; Recipes</td><td>Legitimate recipe blog &mdash; user was browsing recipes</td></tr>
+      <tr><td>12:11:05</td><td>embed.filekitcdn[.]com</td><td>CDN</td><td>Payload delivery CDN &mdash; loaded by malicious ad creative</td></tr>
+      <tr><td>12:11:37</td><td>meal-formula[.]com</td><td>Uncategorized</td><td>Malvertising landing page &mdash; redirect from ad network</td></tr>
+      <tr><td>12:11:44</td><td>&mdash;</td><td>&mdash;</td><td>MealFormula.exe download initiated</td></tr>
+    </table>
+    </div>
+
+    <p>There it was. The user &mdash; a Food Services Manager &mdash; was reading recipes on a legitimate baking blog. Makes complete sense for their role. An ad served through the site's ad network (Adthrive/Raptive) contained a malicious creative that loaded content from <code>embed.filekitcdn[.]com</code>, which redirected the browser to <code>meal-formula[.]com</code>. That domain served up <code>MealFormula.exe</code>.</p>
+
+    <p>The entire attack took <strong>40 seconds</strong> from initial ad load to payload download. The user didn't go looking for this file. They were reading a recipe and a malicious ad hijacked their browser.</p>
+
+    <div class="callout callout-good"><strong>Mystery solved.</strong> Delivery vector: malvertising via a legitimate recipe website. The ad network served a malicious creative that redirected to a payload download. Chrome Incognito hid it from browser forensics, but Umbrella DNS captured every step.</div>
+
+    <h2>Campaign Attribution</h2>
+
+    <p>The domain <code>meal-formula[.]com</code> is part of a documented malvertising campaign variously called FoodFormula or RecipeLister. The campaign specifically targets food service and healthcare workers &mdash; people who are likely to be browsing recipe sites, nutritional resources, and food ordering portals during their workday.</p>
+
+    <p>Related campaign infrastructure includes:</p>
+
+    <ul>
+      <li><code>foodformulasetup[.]com</code> &mdash; alternate landing page</li>
+      <li><code>recipelister[.]com</code> &mdash; alternate landing page</li>
+      <li><code>sync.p7cloud[.]net</code> &mdash; tracking/analytics beacon</li>
+      <li><code>embed.filekitcdn[.]com</code> &mdash; payload CDN</li>
+    </ul>
+
+    <p>The typical payload for this campaign is a <strong>Node.js-based infostealer</strong> &mdash; it drops a bundled Node.js runtime, extracts via 7-Zip, and runs a JavaScript payload that harvests browser credentials, cookies, and crypto wallet data. The characteristic artifacts are <code>System.dll</code>, a <code>7z-out</code> directory, and Node.js processes spawning from unusual paths.</p>
+
+    <p>But here's the thing: this machine got the <strong>legitimate WinRAR installer</strong> instead of the infostealer. My theory is the campaign was in a setup or testing phase when this user hit it. Malvertising campaigns frequently rotate payloads, and serving a clean binary during initial deployment helps them avoid early detection while they test their redirect chain.</p>
+
+    <h2>Full IOC Sweep</h2>
+
+    <p>Even though the delivered payload was clean, I wasn't going to take that on faith. I ran a full sweep for every known indicator associated with the FoodFormula/RecipeLister campaign:</p>
+
+    <ul>
+      <li><strong>System.dll</strong> &mdash; not present anywhere on disk</li>
+      <li><strong>Node.js</strong> &mdash; no Node.js runtime installed or extracted</li>
+      <li><strong>7z-out directory</strong> &mdash; not found</li>
+      <li><strong>Persistence mechanisms</strong> &mdash; no new scheduled tasks, no Run/RunOnce registry keys, no startup folder entries</li>
+      <li><strong>Campaign payload hash</strong> (<code>B179BEC73EFE194BFFB69EEEDC8C136B5E7506A10B3589D223B1E6F8A8FBFB53</code>) &mdash; not present</li>
+      <li><strong>Network connections</strong> &mdash; no active connections to campaign infrastructure</li>
+    </ul>
+
+    <div class="callout callout-good"><strong>All campaign indicators negative.</strong> No infostealer components, no persistence, no C2 communication. The machine was NOT compromised. The only artifact was the clean WinRAR installer sitting in the Downloads folder.</div>
+
+    <h2>Registry Forensics</h2>
+
+    <p>I used remote registry exports to nail down a few remaining questions.</p>
+
+    <h3>BAM (Background Activity Moderator)</h3>
+
+    <p>BAM tracks the last execution time of programs. It confirmed <code>chrome.exe</code> was last run on <strong>March 15th at 2:29 PM PDT</strong> &mdash; two days after the download. The user continued using Chrome in Incognito after the incident, which was consistent with their daily pattern.</p>
+
+    <h3>MountedDevices and PortableDevices</h3>
+
+    <p>I needed to definitively rule out USB as a delivery vector. <code>HKLM\SYSTEM\MountedDevices</code> showed only two entries:</p>
+
+    <ul>
+      <li><code>C:</code> &mdash; the NVMe system drive</li>
+      <li><code>D:</code> &mdash; DVD drive</li>
+    </ul>
+
+    <p><strong>Zero USB storage devices had ever been connected to this machine.</strong> The <code>PortableDevices</code> registry key was completely empty. No phones, no thumb drives, no external hard drives. Ever.</p>
+
+    <div class="callout">Registry forensics is underrated for IR. BAM gives you program execution timestamps without needing prefetch or amcache. MountedDevices + PortableDevices definitively ruled out USB delivery in seconds. These are fast checks via remote registry export &mdash; no need to image the drive for quick answers.</div>
+
+    <h2>Explaining the Upload Ratios</h2>
+
+    <p>Remember those SRUM numbers that worried me? Chrome consistently sending nearly 2x what it received? That needed an explanation before I could close this out.</p>
+
+    <p>Umbrella DNS answered that too. Looking at the full browsing session for March 13th, the user's Incognito activity included:</p>
+
+    <ul>
+      <li><strong>Facebook</strong> &mdash; scrolling feed, watching videos, uploading photos</li>
+      <li><strong>YouTube</strong> &mdash; video streaming (the upload is WebRTC/QUIC overhead)</li>
+      <li><strong>Google account</strong> &mdash; personal email, Google Drive</li>
+      <li><strong>Sysco food ordering portal</strong> &mdash; legitimate work task</li>
+      <li><strong>Dayforce HCM</strong> &mdash; timekeeping system, also work-related</li>
+    </ul>
+
+    <p>The high upload ratios were explained by video streaming protocols and social media activity, not data exfiltration. Facebook and YouTube video in particular generate significant upstream traffic for quality negotiation, analytics telemetry, and connection maintenance. Mix in photo uploads and Google Drive usage, and the numbers made perfect sense.</p>
+
+    <p>The user was doing personal browsing in Incognito to keep it off their work browser history &mdash; mixed in with some legitimate work tasks. That's a policy conversation, not a security incident.</p>
+
+    <h2>Key Takeaways</h2>
+
+    <ul>
+      <li><strong>SRUM defeats Incognito.</strong> Chrome leaves zero disk artifacts in Incognito mode, but SRUM still tracks per-process network bytes at the OS level. It proved Chrome was being actively used when every browser artifact said it wasn't. Always collect <code>srudb.dat</code> early &mdash; <code>esentutl /y /vss</code> to grab it while the file is locked.</li>
+      <li><strong>Umbrella DNS is your browser history backup.</strong> Incognito can't hide from DNS. The full browsing session &mdash; including the exact attack chain &mdash; was reconstructed from DNS query logs alone. If you have network-level DNS logging, you effectively have a shadow browser history for every machine.</li>
+      <li><strong>Malvertising targets specific industries.</strong> This campaign specifically targeted food service and healthcare workers through recipe and food-related sites. The ad network (Adthrive/Raptive) served the malicious creative. Legitimate sites can deliver malware through their ad supply chain.</li>
+      <li><strong>Not every "known malware domain" means compromise.</strong> <code>meal-formula[.]com</code> is part of a documented infostealer campaign, but the actual payload delivered to this machine was a clean WinRAR installer. Don't panic &mdash; investigate. The domain hit alone would have justified a full wipe if we hadn't dug deeper.</li>
+      <li><strong>Image first, ask questions later.</strong> On a related case around the same time, the machine was wiped before full evidence was collected. Lesson learned the hard way. Get your forensic image before remediation starts, even if the case looks like a false positive.</li>
+      <li><strong>Registry is underrated for IR.</strong> BAM gives you program execution timestamps. MountedDevices and PortableDevices definitively ruled out USB delivery. These are fast checks via remote registry export that can answer critical questions in minutes.</li>
+    </ul>
+
+    <h2>IOCs</h2>
+
+    <div class="table-wrap">
+    <table>
+      <tr><th>Type</th><th>Value</th></tr>
+      <tr><td>Malvertising Domain</td><td>meal-formula[.]com</td></tr>
+      <tr><td>Payload CDN</td><td>embed.filekitcdn[.]com</td></tr>
+      <tr><td>Tracking</td><td>sync.p7cloud[.]net</td></tr>
+      <tr><td>Related Campaign</td><td>foodformulasetup[.]com</td></tr>
+      <tr><td>Related Campaign</td><td>recipelister[.]com</td></tr>
+      <tr><td>SHA-256 (delivered)</td><td>CFCA124C2141B4171CEBAD48CC286751910B408AEC69767DB2BC3AF38F277A06 (MealFormula.exe &mdash; clean WinRAR)</td></tr>
+      <tr><td>SHA-256 (typical payload)</td><td>B179BEC73EFE194BFFB69EEEDC8C136B5E7506A10B3589D223B1E6F8A8FBFB53 (FoodFormula Node.js infostealer)</td></tr>
+    </table>
+    </div>
+
+    <h2>Tools Used</h2>
+
+    <ul>
+      <li>Cisco Secure Endpoint (AMP) &mdash; initial detection + trajectory API</li>
+      <li>SrumECmd (Eric Zimmerman) &mdash; SRUM database parsing</li>
+      <li>Cisco Umbrella &mdash; DNS query logs</li>
+      <li>Python + sqlite3 &mdash; browser history analysis, SRUM data queries</li>
+      <li>BAM / Registry forensics &mdash; execution timestamps, USB history</li>
+      <li>Tria.ge sandbox &mdash; file analysis</li>
+    </ul>
+
+  </article>
+
+  <div class="post-footer">
+    <a href="/">&larr; back to posts</a>
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    &copy; 2026 jacobrakai
+  </div>
+</footer>
+
+</body>
+</html>
