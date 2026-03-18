@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Triaging a ScreenConnect MSI phishing campaign: email header forensics proving compromised vs spoofed, sandbox analysis, and the abuse reporting chain that actually disrupts attacker infrastructure.">
+<title>From Phishing Email to Abuse Reports: Triaging a ScreenConnect MSI Campaign | Jacobrakai</title>
+<style>
+  :root {
+    --bg: #101014;
+    --surface: #18181e;
+    --surface-raised: #1f1f27;
+    --border: #2a2a35;
+    --border-light: #35354a;
+    --text: #d4d4d8;
+    --text-dim: #8888a0;
+    --text-bright: #ececf0;
+    --accent: #7eb8da;
+    --accent-hover: #a0d0ee;
+    --green: #5cb870;
+    --red: #d45555;
+    --yellow: #c9a84c;
+    --orange: #cc7744;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); }
+  .skip-link {
+    position: absolute;
+    top: -100px;
+    left: 0;
+    background: var(--accent);
+    color: var(--bg);
+    padding: 8px 16px;
+    z-index: 100;
+    font-size: 14px;
+  }
+  .skip-link:focus { top: 0; }
+  .container { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+
+  nav {
+    padding: 20px 0;
+    margin-bottom: 48px;
+  }
+  nav .container { display: flex; justify-content: space-between; align-items: center; }
+  nav .logo {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  nav .logo:hover { color: var(--text-bright); }
+  nav .links a { margin-left: 28px; color: var(--text-dim); font-size: 14px; letter-spacing: 0.3px; }
+  nav .links a:hover { color: var(--text); }
+
+  /* POST HEADER */
+  .post-header {
+    margin-bottom: 40px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .post-header h1 {
+    font-size: 30px;
+    line-height: 1.3;
+    margin-bottom: 16px;
+    color: var(--text-bright);
+    letter-spacing: -0.5px;
+    font-weight: 700;
+  }
+  .post-header .meta {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    line-height: 1.8;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    margin-right: 4px;
+    font-weight: 600;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    letter-spacing: 0.3px;
+  }
+  .tag-ir { color: var(--red); }
+  .tag-ir::before { content: "#"; }
+  .tag-dfir { color: var(--orange); }
+  .tag-dfir::before { content: "#"; }
+  .tag-splunk { color: var(--green); }
+  .tag-splunk::before { content: "#"; }
+
+  /* ARTICLE TYPOGRAPHY */
+  article {
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--text);
+  }
+  article h2 {
+    font-size: 20px;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-top: 24px;
+    color: var(--text-bright);
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    border-top: 1px solid var(--border);
+  }
+  article h2:first-child {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+  }
+  article h3 {
+    font-size: 16px;
+    margin-top: 28px;
+    margin-bottom: 10px;
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+  article p {
+    margin-bottom: 18px;
+    font-size: 15px;
+    line-height: 1.8;
+  }
+  article > p:first-child {
+    font-size: 16px;
+    color: var(--text);
+    line-height: 1.85;
+  }
+  article ul, article ol {
+    margin: 12px 0 20px 20px;
+    font-size: 15px;
+  }
+  article li {
+    margin-bottom: 8px;
+    line-height: 1.75;
+  }
+  article strong {
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+
+  /* CODE */
+  code {
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+    font-size: 13px;
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    color: var(--accent);
+  }
+  pre {
+    background: var(--surface);
+    border-left: 3px solid var(--border-light);
+    padding: 18px 20px;
+    overflow-x: auto;
+    margin: 16px 0 24px;
+    font-size: 13px;
+    line-height: 1.6;
+    border-radius: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    word-wrap: normal;
+    white-space: pre;
+  }
+
+  /* CALLOUTS */
+  .callout {
+    border-left: 3px solid var(--accent);
+    padding: 14px 18px;
+    margin: 20px 0 24px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    background: transparent;
+  }
+  .callout-warn { border-left-color: var(--yellow); }
+  .callout-good { border-left-color: var(--green); }
+  .callout-bad { border-left-color: var(--red); }
+
+  /* TABLES */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 16px 0 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border-light);
+    font-weight: 600;
+    color: var(--text-bright);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+  }
+  tr:hover td { background: var(--surface); }
+
+  /* FOOTER / NAV */
+  .post-footer {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+  .post-footer a { font-size: 13px; }
+  footer {
+    margin-top: 48px;
+    padding: 24px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'Consolas', 'Fira Code', 'SF Mono', monospace;
+  }
+
+  /* SELECTION */
+  ::selection {
+    background: rgba(126, 184, 218, 0.25);
+    color: var(--text-bright);
+  }
+
+  @media (max-width: 600px) {
+    .post-header h1 { font-size: 24px; }
+    article h2 { font-size: 18px; }
+    .container { padding: 0 16px; }
+    pre { padding: 14px 12px; font-size: 12px; }
+    table { font-size: 12px; }
+    th, td { padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+
+<nav>
+  <div class="container">
+    <a href="/" class="logo">jacob@rakai ~$</a>
+    <div class="links">
+      <a href="/">posts</a>
+      <a href="/about.html">about</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container" id="main">
+  <div class="post-header">
+    <h1>From Phishing Email to Abuse Reports: Triaging a ScreenConnect MSI Campaign</h1>
+    <div class="meta">
+      2026-03-18 &middot; ~7 min read<br>
+      <span class="tag tag-ir">IR</span>
+      <span class="tag tag-dfir">DFIR</span>
+    </div>
+  </div>
+
+  <article>
+
+    <p>A user forwarded a suspicious email to our team &mdash; subject line "Requesting Reviewing Document Via Adobe Cloud," apparently from a compliance manager at another tribal organization in Utah. Before we could look at it, a second user mentioned they'd already tried to download whatever it linked to and said "it wasn't compatible with windows." That phrase got my attention fast.</p>
+
+    <p>Names, domains, and identifiers have been sanitized.</p>
+
+    <h2>Was the Sender Spoofed or Compromised?</h2>
+
+    <p>This is always the first question. The email came from a real person at a real organization we've worked with before. If the account was spoofed, it's an external problem. If the account was compromised, someone is sitting in that person's mailbox right now sending phishing emails to their entire contact list.</p>
+
+    <p>The headers told the whole story:</p>
+
+    <ul>
+      <li><strong>Message-ID</strong> ended in <code>@mail.yahoo.com</code> &mdash; the email originated from real Yahoo infrastructure, not some random SMTP relay</li>
+      <li><strong>X-Mailer: WebService/1.1.25380 YMailNorrin</strong> &mdash; Yahoo Mail web client. Someone logged into this account through a browser and hit send.</li>
+      <li><strong>DKIM signature</strong> &mdash; signed by <code>yahoo.com</code> and <strong>valid</strong>. This is the key detail. If the email were spoofed, the DKIM signature would either fail validation or be signed by a completely different domain. A valid DKIM signature from Yahoo means Yahoo's servers authenticated the sender and sent the message.</li>
+      <li><strong>MX records</strong> for the sender's domain pointed to <code>mx-biz.mail.am0.yahoodns.net</code> &mdash; Yahoo Small Business hosting. The domain's mail infrastructure is Yahoo, and the DKIM signature is Yahoo. Everything is consistent.</li>
+    </ul>
+
+    <div class="callout callout-warn"><strong>Verdict: compromised, not spoofed.</strong> The attacker has this person's credentials and sent this email from their actual Yahoo-hosted mailbox. DKIM passed because the email genuinely came from where it claims to come from.</div>
+
+    <p>Barracuda scored the email at <strong>-0.82</strong> against a kill threshold of 3.0. DKIM passed. SPF passed. The only flag was a missing <code>To:</code> header, which added +1.21 &mdash; not nearly enough. The gateway was never going to catch this because, technically, it's a legitimate email from a legitimate mailbox. It just happens to be sent by an attacker.</p>
+
+    <h2>The Payload</h2>
+
+    <p>The phishing link in the email went through <code>ctrk.klclick3[.]com</code> &mdash; a Klaviyo email marketing tracking link. Klaviyo is a legitimate marketing platform; the attacker was abusing it for redirect infrastructure. The Klaviyo link redirected to <code>dccyop[.]org/[redacted]</code>, which served up <code>ScreenConnect.ClientSetup.msi</code> &mdash; a 16.7 MB MSI installer.</p>
+
+    <p>The user who said it "wasn't compatible with windows" almost certainly hit a SmartScreen warning or a browser download block. That warning did its job.</p>
+
+    <h2>Sandbox Analysis</h2>
+
+    <p>I submitted the MSI to <a href="https://tria.ge">Tria.ge</a> and got an 8/10 threat score. It's a legitimate ScreenConnect installer, but weaponized for unauthorized access:</p>
+
+    <ul>
+      <li><strong>C2 relay:</strong> <code>instance-x7bxki-relay.screenconnect[.]com</code> resolving to <code>15.235.110.89</code> (OVH Canada)</li>
+      <li><strong>Session ID:</strong> <code>c74a4df9-a1ae-422f-8ab0-a017da1ee909</code> hardcoded in the installer config</li>
+      <li><strong>Credential provider DLL</strong> and <strong>authentication package DLL</strong> installed &mdash; these hook into the Windows credential pipeline for interception</li>
+      <li><strong>64 privilege escalation attempts</strong> &mdash; SeDebugPrivilege, SeTcbPrivilege, and more</li>
+      <li><strong>37+ COM hijacking registry modifications</strong></li>
+    </ul>
+
+    <p>This is the same RMM tool abuse pattern that's everywhere right now. The attacker doesn't need to write custom malware. They configure a ScreenConnect instance, bake the connection details into the MSI, and get persistent remote access through a signed, legitimate remote management tool. It installs as a service, survives reboots, and looks like normal IT software to anyone who isn't specifically looking for unauthorized RMM tools.</p>
+
+    <h2>Endpoint Verification</h2>
+
+    <p>Two machines received the email. I pulled AMP trajectory data for both via the API and ran quick checks for ScreenConnect artifacts: files, services, registry keys, network connections to the C2 relay. Both came back clean. One user downloaded the MSI but never ran it. The other never clicked the link at all.</p>
+
+    <div class="callout callout-good"><strong>No installation on either machine.</strong> No ScreenConnect files, no services, no registry entries, no connections to the C2 IP. SmartScreen and user caution did the job here.</div>
+
+    <h2>The Abuse Reporting Chain</h2>
+
+    <p>This is where I think a lot of IR stops short. We confirmed no compromise on our end, but the attacker's infrastructure is still live. Every hour that relay instance stays up, more orgs get hit with the same MSI. So I spent about 10 minutes filing abuse reports:</p>
+
+    <ul>
+      <li><strong>ConnectWise</strong> &mdash; reported the weaponized relay instance with the session ID. ConnectWise has an abuse process for this and can disable the instance remotely.</li>
+      <li><strong>OVH</strong> &mdash; reported the C2 server IP (<code>15.235.110.89</code>) to their abuse team with the full context.</li>
+      <li><strong>APWG (Anti-Phishing Working Group)</strong> &mdash; full IOC report to <code>reportphishing@apwg.org</code>. They aggregate phishing data across the industry.</li>
+      <li><strong>Klaviyo</strong> &mdash; reported the abused tracking link to <code>abuse@klaviyo.com</code>. The redirect chain needs to be broken.</li>
+      <li><strong>The compromised user's organization</strong> &mdash; contacted them directly to let them know the account is compromised and actively sending phishing emails.</li>
+    </ul>
+
+    <p>And then there was Yahoo.</p>
+
+    <div class="callout callout-bad"><strong>Yahoo's abuse reporting is broken.</strong> The sender's mailbox is compromised and actively being used to phish. I tried to report it. Yahoo's online abuse form is non-functional. I emailed <code>abuse-mail@yahoo.com</code> and got a <strong>554 mailbox not found</strong> bounce. The largest email provider in the world and you literally cannot report a compromised account to them. The attacker will keep sending from this mailbox until the actual owner notices or Yahoo's automated systems eventually catch on &mdash; whichever comes first. I documented the failed reporting attempts and moved on.</div>
+
+    <h2>Key Takeaways</h2>
+
+    <ul>
+      <li><strong>DKIM tells you compromised vs. spoofed.</strong> If the DKIM signature is valid and the signing domain matches the sender's mail infrastructure, someone has the credentials. If DKIM fails or is signed by a random domain, it's spoofed. This distinction matters because it changes your response &mdash; compromised means the sender's org needs to be notified immediately.</li>
+      <li><strong>Gateways can't catch compromised account phishing.</strong> Barracuda scored this at -0.82. The email was technically legitimate &mdash; it really did come from where it said it came from, DKIM passed, SPF passed. User awareness is the only defense layer for this attack pattern.</li>
+      <li><strong>RMM tool abuse is the dominant delivery method right now.</strong> ScreenConnect, AnyDesk, Action1 &mdash; attackers use legitimate remote access tools because they're signed, trusted, and blend in with IT software. If you're not explicitly blocking unauthorized RMM tools, you're relying on users to not run the installer.</li>
+      <li><strong>Report upstream.</strong> ConnectWise can disable the relay instance. OVH can null-route the C2 IP. Klaviyo can kill the redirect link. It takes 10 minutes and actually disrupts the attacker's infrastructure. Your incident is one of many &mdash; cutting off the tooling helps everyone.</li>
+      <li><strong>Yahoo's abuse reporting is broken.</strong> Document it, move on.</li>
+    </ul>
+
+    <h2>IOCs</h2>
+
+    <div class="table-wrap">
+    <table>
+      <tr><th>Type</th><th>Value</th></tr>
+      <tr><td>Redirect</td><td>ctrk.klclick3[.]com (Klaviyo, abused)</td></tr>
+      <tr><td>Payload Host</td><td>dccyop[.]org</td></tr>
+      <tr><td>C2 Relay</td><td>instance-x7bxki-relay.screenconnect[.]com</td></tr>
+      <tr><td>C2 IP</td><td>15.235.110.89 (OVH Canada)</td></tr>
+      <tr><td>SHA-256</td><td>1BE180E92DC8F61434CA170203F16DC1CDE5B3AD26FB80A2096C48F04070F9B2</td></tr>
+      <tr><td>Sender</td><td>[compromised-user]@[smallregionalgovt] (compromised)</td></tr>
+    </table>
+    </div>
+
+    <h2>Tools Used</h2>
+
+    <ul>
+      <li>Cisco Secure Endpoint (AMP) &mdash; trajectory API for endpoint verification</li>
+      <li>Tria.ge &mdash; sandbox analysis of the MSI payload</li>
+      <li>Barracuda ESG &mdash; email header analysis and scoring</li>
+      <li>PowerShell COM &mdash; Outlook automation for header extraction</li>
+    </ul>
+
+  </article>
+
+  <div class="post-footer">
+    <a href="/">&larr; back to posts</a>
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    &copy; 2026 jacobrakai
+  </div>
+</footer>
+
+</body>
+</html>
